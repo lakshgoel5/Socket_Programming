@@ -76,13 +76,14 @@ int main() {
     //Network protocol: Big-endian (most significant byte first)
     serv_addr.sin_port = htons(server_port); //convert to network byte order
 
-    if (inet_pton(AF_INET, server_ip.c_str(), &serv_addr.sin_addr) <= 0) { //IPv4, string form in null terminated C style, binary form
+    if (inet_pton(AF_INET, server_ip.c_str(), &serv_addr.sin_addr) <= 0) { //Internet presentation to numeric, converts human readble IP to binary form
+        //IPv4, string form in null terminated C style, binary form
         // 1->success, 0->invalid address, -1->error
         cerr << "Invalid address / Address not supported" << endl;
         return 1;
     }
 
-    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) { 
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {  //I want to connect to server whose ip and port is known
         //socket descriptor, server address structure(type cast to generic type)(C style cast recommended), size of the structure
         //Does a three-way handshake SYN ->, SYN-ACK <-, ACK ->
         //returns 0 on success, -1 on error
@@ -98,7 +99,12 @@ int main() {
     send(sock, message.c_str(), message.length(), 0); //socket descriptor, message in C style, length of the message, flags(0 for no special options)
     cout << "Message sent: " << message << endl;
 
-    
+    char buffer[1024] = {0}; //1KB buffer for incoming data
+    int bytes = recv(sock, buffer, sizeof(buffer)-1, 0); //receive data from server
+    if(bytes > 0){
+        buffer[bytes] = '\0'; //null terminate the received string
+        cout << "Message received: " << buffer << endl;
+    }
 
     close(sock);
 
