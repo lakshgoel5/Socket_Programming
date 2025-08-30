@@ -47,14 +47,58 @@ map<string, string> parse_config(const string filename){
     return config;
 }
 
+bool load_words(const string filename, vector<string>& words){
+    ifstream file(filename);
+    if(!file.is_open()){
+        cerr << "Could not open the file '" << filename << "'" << endl;
+        return false;
+    }
+
+    string line;
+    while(getline(file, line)){
+        //separate words by comma and push in vector
+        size_t start = 0;
+        size_t end = line.find(',');
+        while(end != string::npos){
+            string word = line.substr(start, end - start);
+            //trim whitespaces //for handling word1, , word2
+            word.erase(0, word.find_first_not_of(" "));
+            word.erase(word.find_last_not_of(" ") + 1);
+            if(!word.empty()){
+                words.push_back(word);
+            }
+            start = end + 1;
+            end = line.find(',', start);
+        }
+        //last word
+        string word = line.substr(start);
+        word.erase(0, word.find_first_not_of(" "));
+        word.erase(word.find_last_not_of(" ") + 1);
+        if(!word.empty()){
+            words.push_back(word);
+        }
+    }
+    words.push_back("EOF"); //end of file marker
+    return true;
+}
+
 int main(){
 
+    // load config
     string filename = "config.json";
+    string words = "words.txt";
     map<string, string> config;
     try{
         config = parse_config(filename);
     } catch (const exception& e) {
         cerr << "Error: Could not parse " << filename << ": " << e.what() << endl;
+        return 1;
+    }
+
+    // load words
+    vector<string> word_list;
+    if(!load_words(words, word_list)){
+        cout << "Error: Could not load words from " << words << endl;
         return 1;
     }
 
@@ -73,6 +117,7 @@ int main(){
     addr.sin_addr.s_addr = INADDR_ANY; //bind to all available interfaces
     addr.sin_port = htons(server_port); //port number
 
+    //assign a specific address and port to the socket
     if (bind(sock, (struct sockaddr*)&addr, (socklen_t)sizeof(addr)) < 0) {
         //socket, address, size of address
         //0->success, -1->failure
@@ -80,6 +125,7 @@ int main(){
         return 1;
     }
 
+    //passive listening state, ready to accept incoming requests
     if (listen(sock, 1) < 0) {
         //socket, backlog(max num of pending connections that can be queued)
         //in our case, we will handle one connection at a time
@@ -88,9 +134,19 @@ int main(){
         return 1;
     }
 
-    int client_fd = accept(sock, nullptr, nullptr); //client file descriptor
+    //program waits at this line until a client connects to the server
+    int client_fd = accept(sock, nullptr, nullptr); //returns client file descriptor
+    //All future communication with this specific client (like send() and recv()) will happen through this new client_fd, 
+    //while the original sock goes back to listening for other new clients.
+
+    //We will have just one connection request in the backlog queue ------debug------
+    if (client_fd < 0) {
+        cerr << "Accept failed\n";
+        return 1;
+    }
 
     //process data
+
 
     close(sock); //close the socket as we are done with it
 
