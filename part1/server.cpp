@@ -82,6 +82,10 @@ bool load_words(const string filename, vector<string>& words){
     return true;
 }
 
+void handle_client(int client_fd, const vector<string>& word_list){
+
+}
+
 int main(){
 
     // load config
@@ -146,7 +150,7 @@ int main(){
     }
 
     //process data
-
+    handle_client(client_fd, word_list);
 
     close(sock); //close the socket as we are done with it
 
