@@ -86,11 +86,23 @@ void handle_client(int client_fd, const vector<string>& word_list){
 
 }
 
-int main(){
+int main(int argc, char* argv[]){
 
     // load config
     string filename = "config.json";
     string words = "words.txt";
+
+    // parse arguments
+    for (int i = 1; i < argc; i++) {
+        string arg = argv[i];
+        if (arg == "--config" && i + 1 < argc) {
+            filename = argv[++i];
+        }
+        else if (arg == "--words" && i + 1 < argc) {
+            words = argv[++i];
+        }
+    }
+
     map<string, string> config;
     try{
         config = parse_config(filename);

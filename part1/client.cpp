@@ -68,9 +68,23 @@ void analyse_print(char *buffer) {
     }
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     // get server configuration
     string filename = "config.json";
+    string override_k = "";
+    string override_p = "";
+
+    for (int i = 1; i < argc; i++) {
+        string arg = argv[i];
+        if (arg == "--config" && i + 1 < argc) {
+            filename = argv[++i];
+        } else if (arg == "--k" && i + 1 < argc) {
+            override_k = argv[++i];
+        } else if (arg == "--p" && i + 1 < argc) {
+            override_p = argv[++i];
+        }
+    }
+    
     map<string, string> config;
     try{
         config = parse_config(filename);
@@ -78,6 +92,10 @@ int main() {
         cerr << "Error: Could not parse " << filename << ": " << e.what() << endl;
         return 1;
     }
+
+    //override k and p if provided in command line
+    if (!override_k.empty()) config["k"] = override_k;
+    if (!override_p.empty()) config["p"] = override_p;
 
     // connect to server
     const string server_ip = config["server_ip"];
