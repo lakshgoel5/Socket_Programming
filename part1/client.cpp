@@ -47,8 +47,7 @@ map<string, string> parse_config(const string filename){
     return config;
 }
 
-void analyse_print(char *buffer) {
-    map<string, int> freq;
+void analyse(char *buffer, map<string, int>& freq) {
     while(*buffer != '\0'){
         string key;
         while(*buffer != ','){
@@ -60,17 +59,35 @@ void analyse_print(char *buffer) {
             freq[key]++;
         }
     }
+}
 
+void print(map<string, int>& freq) {
     // Print frequency analysis results
-    cout << "Frequency analysis results:" << endl;
     for (const auto& pair : freq) {
         cout << pair.first << ", " << pair.second << endl;
     }
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     // get server configuration
     string filename = "config.json";
+    string override_k = "";
+    string override_p = "";
+    bool quiet = true;
+
+    for (int i = 1; i < argc; i++) {
+        string arg = argv[i];
+        if (arg == "--config" && i + 1 < argc) {
+            filename = argv[++i];
+        } else if (arg == "--k" && i + 1 < argc) {
+            override_k = argv[++i];
+        } else if (arg == "--p" && i + 1 < argc) {
+            override_p = argv[++i];
+        } else if(arg == "--quiet"){
+            quiet = false;
+        }
+    }
+    
     map<string, string> config;
     try{
         config = parse_config(filename);
@@ -78,6 +95,10 @@ int main() {
         cerr << "Error: Could not parse " << filename << ": " << e.what() << endl;
         return 1;
     }
+
+    //override k and p if provided in command line
+    if (!override_k.empty()) config["k"] = override_k;
+    if (!override_p.empty()) config["p"] = override_p;
 
     // connect to server
     const string server_ip = config["server_ip"];
@@ -115,7 +136,7 @@ int main() {
     //send and receive data
     string k = config["k"];
     string p = config["p"];
-    const string message = k + "," + p; //message to be sent
+    const string message = k + "," + p + "\n"; //message to be sent
     send(sock, message.c_str(), message.length(), 0); //socket descriptor, message in C style, length of the message, flags(0 for no special options)
     cout << "Message sent: " << message << endl;
 
@@ -128,7 +149,11 @@ int main() {
     if(bytes > 0){
         buffer[bytes] = '\0'; //null terminate the received string
         cout << "Message received: " << buffer << endl;
-        analyse_print(buffer);
+        map<string, int> freq;
+        analyse(buffer, freq);
+        if(quiet==true){
+            print(freq);
+        }
     }
 
     return 0;
