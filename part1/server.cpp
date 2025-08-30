@@ -149,10 +149,12 @@ int main(){
         return 1;
     }
 
+    //-----debug----- check whether sock closed before or after accept
     //process data
     handle_client(client_fd, word_list);
-
+    close(client_fd);
     close(sock); //close the socket as we are done with it
+
 
     cout << "Server listening on port " << server_port << endl;
 }
