@@ -83,7 +83,36 @@ bool load_words(const string filename, vector<string>& words){
 }
 
 void handle_client(int client_fd, const vector<string>& word_list){
+    string buffer;
+    int bytes_read = read(client_fd, buffer, sizeof(buffer));
 
+    if (bytes_read<=0) {
+        cerr << "Error: Could not read p and k" << endl;
+        return;
+    }
+    
+    int p, k;
+    if (!buffer.empty() && buffer.back() == '\n') {
+        buffer.pop_back();
+    }
+    size_t comma_pos = buffer.find(',');
+    if (comma_pos == std::string::npos) {
+        return false; // invalid format
+    }
+    p = stoi(buffer.substr(0, comma_pos));
+    k = stoi(buffer.substr(comma_pos+1));
+
+    int i = p;
+    for ( ; i<p+k && i<word_list.size() ; i++) {
+        buffer += word_list[i];
+        buffer += ",";
+    }
+
+    if (i<p+k-1) {
+        buffer += "EOF\n";
+    }
+
+    write(client_fd, buffer, sizeof(buffer));
 }
 
 int main(){
@@ -99,7 +128,7 @@ int main(){
         return 1;
     }
 
-    // load words
+    // // load words
     vector<string> word_list;
     if(!load_words(words, word_list)){
         cout << "Error: Could not load words from " << words << endl;
