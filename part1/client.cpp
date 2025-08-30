@@ -47,8 +47,7 @@ map<string, string> parse_config(const string filename){
     return config;
 }
 
-void analyse_print(char *buffer) {
-    map<string, int> freq;
+void analyse(char *buffer, map<string, int>& freq) {
     while(*buffer != '\0'){
         string key;
         while(*buffer != ','){
@@ -60,9 +59,10 @@ void analyse_print(char *buffer) {
             freq[key]++;
         }
     }
+}
 
+void print(map<string, int>& freq) {
     // Print frequency analysis results
-    cout << "Frequency analysis results:" << endl;
     for (const auto& pair : freq) {
         cout << pair.first << ", " << pair.second << endl;
     }
@@ -73,6 +73,7 @@ int main(int argc, char* argv[]) {
     string filename = "config.json";
     string override_k = "";
     string override_p = "";
+    bool quiet = true;
 
     for (int i = 1; i < argc; i++) {
         string arg = argv[i];
@@ -82,6 +83,8 @@ int main(int argc, char* argv[]) {
             override_k = argv[++i];
         } else if (arg == "--p" && i + 1 < argc) {
             override_p = argv[++i];
+        } else if(arg == "--quiet"){
+            quiet = false;
         }
     }
     
@@ -133,7 +136,7 @@ int main(int argc, char* argv[]) {
     //send and receive data
     string k = config["k"];
     string p = config["p"];
-    const string message = k + "," + p; //message to be sent
+    const string message = k + "," + p + "\n"; //message to be sent
     send(sock, message.c_str(), message.length(), 0); //socket descriptor, message in C style, length of the message, flags(0 for no special options)
     cout << "Message sent: " << message << endl;
 
@@ -146,7 +149,11 @@ int main(int argc, char* argv[]) {
     if(bytes > 0){
         buffer[bytes] = '\0'; //null terminate the received string
         cout << "Message received: " << buffer << endl;
-        analyse_print(buffer);
+        map<string, int> freq;
+        analyse(buffer, freq);
+        if(quiet==true){
+            print(freq);
+        }
     }
 
     return 0;
