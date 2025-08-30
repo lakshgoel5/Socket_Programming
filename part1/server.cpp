@@ -83,8 +83,10 @@ bool load_words(const string filename, vector<string>& words){
 }
 
 void handle_client(int client_fd, const vector<string>& word_list){
-    string buffer;
-    int bytes_read = read(client_fd, buffer, sizeof(buffer));
+    char bufferarray[1024] = {0};
+    int bytes_read = read(client_fd, bufferarray, sizeof(bufferarray) - 1);
+    bufferarray[bytes_read] = '\0';
+    string buffer(bufferarray);
 
     if (bytes_read<=0) {
         cerr << "Error: Could not read p and k" << endl;
@@ -97,7 +99,7 @@ void handle_client(int client_fd, const vector<string>& word_list){
     }
     size_t comma_pos = buffer.find(',');
     if (comma_pos == std::string::npos) {
-        return false; // invalid format
+        return; // invalid format
     }
     p = stoi(buffer.substr(0, comma_pos));
     k = stoi(buffer.substr(comma_pos+1));
@@ -112,7 +114,7 @@ void handle_client(int client_fd, const vector<string>& word_list){
         buffer += "EOF\n";
     }
 
-    write(client_fd, buffer, sizeof(buffer));
+    write(client_fd, buffer.c_str(), buffer.size());
 }
 
 int main(int argc, char* argv[]){
@@ -157,7 +159,12 @@ int main(int argc, char* argv[]){
         return 1;
     }
 
+    //------debug------
+    int opt = 1;
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
     struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY; //bind to all available interfaces
     addr.sin_port = htons(server_port); //port number

@@ -28,7 +28,8 @@ client: $(CLIENT_OBJ)
 run: build
 	@echo "Running server in background..."
 	./server &
-	PID=$$!; 
-	sleep 1;
-	@echo "Running client..."
-	./client
+	PID=$$!
+	sleep 1
+	@echo "Running client with P=$(P), K=$(K)..."
+	P=$(P) K=$(K) ./client
+	kill $$PID
