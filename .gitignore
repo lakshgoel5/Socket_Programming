@@ -5,3 +5,6 @@ build.log
 *.o
 client
 server
+test.cpp
+*.out
+*.exe

@@ -10,40 +10,58 @@
 
 using namespace std;
 
-map<string, string> parse_config(const string filename){
+map<string, string> parse_config(const string& filename) {
     map<string, string> config;
-    // read the file
-    ifstream file(filename); //creates instance and opens the file
-    // debug
+    ifstream file(filename);
     if (!file.is_open()) {
         cerr << "Could not open the file '" << filename << "'" << endl;
         return config;
     }
-
-    string line;
-    while (getline(file, line)) { //delimiter is newline by default
-        //itreate the line
-        size_t pos = line.find(':');
-        if(pos != string::npos){
-            string key = line.substr(0, pos); //pos i.e. ':' not included
-            string value = line.substr(pos + 1);
-
-            //trim starting and trailing whitespaces and trailing commas
-            key.erase(0, key.find_first_not_of(" "));
-            key.erase(key.find_last_not_of(" ,") + 1);
-            value.erase(0, value.find_first_not_of(" "));
-            value.erase(value.find_last_not_of(" ,") + 1);
-
-            //trim quotes if exist
-            if (!key.empty() && key.front() == '"' && key.back() == '"') {
-                key = key.substr(1, key.length() - 2);
-            }
-            if (!value.empty() && value.front() == '"' && value.back() == '"') {
-                value = value.substr(1, value.length() - 2);
-            }
-            config[key] = value;
+    
+    // Read entire file as a single string
+    string json_str((istreambuf_iterator<char>(file)), istreambuf_iterator<char>());
+    
+    size_t pos = 0;
+    while (true) {
+        // Find next key opening quote
+        size_t key_start = json_str.find('"', pos);
+        if (key_start == string::npos) break;
+        
+        size_t key_end = json_str.find('"', key_start + 1);
+        if (key_end == string::npos) break;
+        
+        string key = json_str.substr(key_start + 1, key_end - key_start - 1);
+        
+        // Find colon after the key
+        size_t colon_pos = json_str.find(':', key_end);
+        if (colon_pos == string::npos) break;
+        
+        // Find value start (skip whitespace)
+        size_t value_start = json_str.find_first_not_of(" \t\n\r", colon_pos + 1);
+        if (value_start == string::npos) break;
+        
+        string value;
+        if (json_str[value_start] == '"') {
+            // Value is a string, find closing quote
+            size_t value_end = json_str.find('"', value_start + 1);
+            if (value_end == string::npos) break;
+            value = json_str.substr(value_start + 1, value_end - value_start - 1);
+            pos = value_end + 1;
+        } else {
+            // Value is number or boolean; find comma or end brace
+            size_t value_end = json_str.find_first_of(",}", value_start);
+            if (value_end == string::npos) break;
+            value = json_str.substr(value_start, value_end - value_start);
+            pos = value_end + 1;
+            // Trim whitespace from value ends
+            size_t val_start_trim = value.find_first_not_of(" \t\n\r");
+            size_t val_end_trim = value.find_last_not_of(" \t\n\r");
+            value = value.substr(val_start_trim, val_end_trim - val_start_trim + 1);
         }
+        
+        config[key] = value;
     }
+    
     return config;
 }
 
@@ -104,13 +122,15 @@ void handle_client(int client_fd, const vector<string>& word_list){
     p = stoi(buffer.substr(0, comma_pos));
     k = stoi(buffer.substr(comma_pos+1));
 
-    int i = p;
-    for ( ; i<p+k && i<word_list.size() ; i++) {
-        buffer += word_list[i];
+    buffer.clear();
+    int start_pos = p;
+    int n = word_list.size();
+    for ( ; start_pos<p+k && start_pos<n ; start_pos++) {
+        buffer += word_list[start_pos];
         buffer += ",";
     }
 
-    if (i<p+k-1) {
+    if (start_pos<p+k-1) {
         buffer += "EOF\n";
     }
 
@@ -164,7 +184,7 @@ int main(int argc, char* argv[]){
     setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
+    memset(&addr, 0, sizeof(addr)); //---debug---
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY; //bind to all available interfaces
     addr.sin_port = htons(server_port); //port number

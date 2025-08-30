@@ -19,5 +19,6 @@ time.sleep(0.5)
 
 # run client once (no --quiet): prints word frequencies + ELAPSED_MS
 print(h1.cmd(f"./client --config demo_config.json --k {K}"))
+print(f"Server and client ran successfully. In demo_runner, {P}")
 
 srv.terminate(); time.sleep(0.2); net.stop()
