@@ -47,6 +47,26 @@ map<string, string> parse_config(const string filename){
     return config;
 }
 
+void analyse_print(char *buffer) {
+    map<string, int> freq;
+    while(*buffer != '\0'){
+        string key;
+        while(*buffer != ','){
+            key += *buffer;
+            buffer++;
+        }
+        buffer++; //skip comma
+        if(key!="EOF"){
+            freq[key]++;
+        }
+    }
+
+    // Print frequency analysis results
+    cout << "Frequency analysis results:" << endl;
+    for (const auto& pair : freq) {
+        cout << pair.first << ", " << pair.second << endl;
+    }
+}
 
 int main() {
     // get server configuration
@@ -99,14 +119,17 @@ int main() {
     send(sock, message.c_str(), message.length(), 0); //socket descriptor, message in C style, length of the message, flags(0 for no special options)
     cout << "Message sent: " << message << endl;
 
+    //recv takes a charecter array as buffer
     char buffer[1024] = {0}; //1KB buffer for incoming data
     int bytes = recv(sock, buffer, sizeof(buffer)-1, 0); //receive data from server
+
+    close(sock);
+
     if(bytes > 0){
         buffer[bytes] = '\0'; //null terminate the received string
         cout << "Message received: " << buffer << endl;
+        analyse_print(buffer);
     }
-
-    close(sock);
 
     return 0;
 }
