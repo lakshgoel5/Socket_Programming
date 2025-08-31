@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-import pandas as pd
-import matplotlib.pyplot as plt
+import pandas as pd #load and manipulate csv
+import matplotlib.pyplot as plt #plots
 from pathlib import Path
 import math
 

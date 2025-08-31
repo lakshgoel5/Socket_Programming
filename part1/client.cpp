@@ -72,7 +72,9 @@ void analyse(char *buffer, map<string, int>& freq) {
         if (*buffer == ',') {
             buffer++; // skip comma only if present
         }
-
+        if (!key.empty() && key.back() == '\n') {
+            key.pop_back();
+        }
         if (key == "EOF") {
             break;
         }
@@ -171,8 +173,9 @@ int main(int argc, char* argv[]) {
 
     //end clock time
     auto end = std::chrono::high_resolution_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    cout << "ELAPSED_MS:" << elapsed << endl;
+    auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    double elapsed_msec = elapsed / 1e3;
+    cout << "ELAPSED_MS:" << elapsed_msec << endl;
 
     close(sock);
 

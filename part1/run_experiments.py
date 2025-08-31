@@ -14,6 +14,14 @@ CLIENT_CMD_TMPL = "./client --config config.json --quiet"
 
 RESULTS_CSV = Path("results.csv")
 
+def modify_config(param, value):
+    import json
+    with open("config.json", "r") as f:
+        cfg = json.load(f)
+    cfg[param] = value
+    with open("config.json", "w") as f:
+        json.dump(cfg, f, indent=2)
+
 def main():
     # Prepare CSV
     if not RESULTS_CSV.exists():
