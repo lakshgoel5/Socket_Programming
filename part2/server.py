@@ -4,7 +4,6 @@ import sys
 import json
 
 def parse_config(filename):
-    """Load config.json with server_ip and server_port"""
     with open(filename, "r") as f:
         return json.load(f)
 
@@ -20,59 +19,78 @@ def load_words(filename):
     words.append("EOF")
     return words
 
-def handle_client(client_sock, word_list):
-    """Process a single client request"""
-    data = client_sock.recv(1024).decode().strip()
-    if not data:
-        return
+def handle_client(client_socket, word_list):
     try:
-        p_str, k_str = data.split(",")
-        p, k = int(p_str), int(k_str)
-    except Exception:
-        print("Invalid client request:", data)
-        return
+        data = client_socket.recv(1024).decode()
+        if not data.endswith('\n'):
+            client_socket.sendall(b"EOF\n")
+            return
 
-    # Build response
-    response = []
-    for i in range(p, min(p+k, len(word_list))):
-        response.append(word_list[i])
-    if p + k >= len(word_list):
-        response.append("EOF")
-    msg = ",".join(response) + "\n"
+        data = data.strip()
+        parts = data.split(',')
+        if len(parts) != 2:
+            client_socket.sendall(b"EOF\n")
+            return
 
-    client_sock.sendall(msg.encode())
+        try:
+            p = int(parts[0])
+            k = int(parts[1])
+        except ValueError:
+            client_socket.sendall(b"EOF\n")
+            return
+
+        if p >= len(word_list):
+            client_socket.sendall(b"EOF\n")
+            return
+
+        slice_end = p + k
+        if slice_end > len(word_list):
+            slice_end = len(word_list)
+
+        response_words = word_list[p:slice_end]
+        if response_words and response_words[-1] == "EOF":
+            # Send words until EOF including it, suffixed by \n
+            response = ','.join(response_words) + '\n'
+        elif slice_end == len(word_list):
+            # End reached without EOF in slice
+            response = ','.join(response_words) + ',EOF\n'
+        else:
+            response = ','.join(response_words) + '\n'
+
+        client_socket.sendall(response.encode())
+    finally:
+        client_socket.close()
 
 def main():
-    config_file = "config.json"
-    words_file = "words.txt"
+    config = parse_config("config.json")
+    if not config:
+        return 1
 
-    # parse args
-    args = sys.argv[1:]
-    for i in range(len(args)):
-        if args[i] == "--config" and i+1 < len(args):
-            config_file = args[i+1]
-        if args[i] == "--words" and i+1 < len(args):
-            words_file = args[i+1]
+    word_list = load_words(config.get("filename", "words.txt"))
+    if not word_list:
+        return 1
 
-    config = parse_config(config_file)
-    word_list = load_words(words_file)
+    server_ip = config.get("server_ip", "0.0.0.0")
+    server_port = int(config.get("server_port", 5000))
 
-    host = config["server_ip"]
-    port = int(config["server_port"])
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-    # Create TCP socket
-    server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_sock.bind((host, port))
-    server_sock.listen(32)   # backlog large enough
+    server_socket.bind((server_ip, server_port))
+    server_socket.listen(1)
+    print(f"Server listening on {server_ip}:{server_port}")
 
-    print(f"Server listening on {host}:{port}")
-
-    while True:
-        client_sock, addr = server_sock.accept()
-        # Serve one client at a time (sequential)
-        handle_client(client_sock, word_list)
-        client_sock.close()
+    try:
+        while True:
+            client_socket, addr = server_socket.accept()
+            print(f"Connection accepted from {addr}")
+            handle_client(client_socket, word_list)
+    except KeyboardInterrupt:
+        print("Server shutting down.")
+    finally:
+        server_socket.close()
+    return 0
 
 if __name__ == "__main__":
-    main()
+    import sys
+    sys.exit(main())

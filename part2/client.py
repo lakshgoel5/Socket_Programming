@@ -1,66 +1,93 @@
-#!/usr/bin/env python3
+import argparse
 import socket
-import sys
-import json
 import time
+import json
 
 def parse_config(filename):
-    with open(filename, "r") as f:
-        return json.load(f)
+    """Parse JSON config file into a dictionary."""
+    try:
+        with open(filename, 'r') as f:
+            config = json.load(f)
+        return config
+    except Exception as e:
+        print(f"Error reading config '{filename}': {e}")
+        return {}
 
-def analyse(buffer):
-    freq = {}
-    for word in buffer.strip().split(","):
-        word = word.strip()
-        if word == "EOF" or not word:
-            continue
-        freq[word] = freq.get(word, 0) + 1
-    return freq
+def analyse(buffer, freq):
+    """
+    Parses a comma-separated word string, counting frequency of each word until 'EOF'.
+    """
+    words = buffer.split(',')
+    for word in words:
+        key = word.strip()
+        if key == 'EOF':
+            break
+        if key:
+            freq[key] = freq.get(key, 0) + 1
+
+def print_freq(freq):
+    """
+    Prints the frequency dictionary as 'word, count' lines.
+    """
+    items = list(freq.items())
+    for i, (word, count) in enumerate(items):
+        end_char = '\n' if i < len(items) - 1 else ''
+        print(f"{word}, {count}", end=end_char)
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Word Counting Client")
+    parser.add_argument("--config", type=str, default="config.json", help="Path to config file")
+    parser.add_argument("--k", type=str, help="Override k parameter")
+    parser.add_argument("--p", type=str, help="Override p parameter")
+    parser.add_argument("--quiet", action="store_false", help="Toggle verbose output off")
+    return parser.parse_args()
 
 def main():
-    config_file = "config.json"
-    k_override = None
-    p_override = None
-    quiet = True
+    args = parse_args()
+    config = parse_config(args.config)
+    if not config:
+        return 1
 
-    # parse args
-    args = sys.argv[1:]
-    i = 0
-    while i < len(args):
-        if args[i] == "--config" and i+1 < len(args):
-            config_file = args[i+1]; i += 2; continue
-        if args[i] == "--k" and i+1 < len(args):
-            k_override = args[i+1]; i += 2; continue
-        if args[i] == "--p" and i+1 < len(args):
-            p_override = args[i+1]; i += 2; continue
-        if args[i] == "--quiet":
-            quiet = False; i += 1; continue
-        i += 1
+    if args.k is not None:
+        config["k"] = args.k
+    if args.p is not None:
+        config["p"] = args.p
 
-    config = parse_config(config_file)
-    host = config["server_ip"]
-    port = int(config["server_port"])
-    k = k_override if k_override else config["k"]
-    p = p_override if p_override else config["p"]
+    server_ip = config.get("server_ip")
+    server_port = int(config.get("server_port", 0))
+    p = config.get("p", "0")
+    k = config.get("k", "5")
 
-    # connect to server
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect((host, port))
+    if not server_ip or server_port == 0:
+        print("Invalid server IP or port in configuration")
+        return 1
 
-    msg = f"{p},{k}\n"
-    start = time.time()
-    sock.sendall(msg.encode())
+    # Create TCP socket and connect
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((server_ip, server_port))
+    except Exception as e:
+        print(f"Connection failed: {e}")
+        return 1
 
-    data = sock.recv(4096).decode()
-    elapsed = (time.time() - start) * 1000.0  # ms
-    print(f"ELAPSED_MS:{elapsed:.3f}")
+    message = f"{p},{k}\n".encode()
+    start = time.perf_counter()
+    sock.sendall(message)
+    buffer = sock.recv(1024).decode()
+    end = time.perf_counter()
+    elapsed_ms = (end - start) * 1000
+    print(f"ELAPSED_MS:{elapsed_ms}")
 
     sock.close()
 
-    if not quiet:
-        freq = analyse(data)
-        for w, c in freq.items():
-            print(f"{w}, {c}")
+    freq = {}
+    analyse(buffer, freq)
+
+    if args.quiet:
+        print_freq(freq)
+
+    return 0
 
 if __name__ == "__main__":
-    main()
+    import sys
+    sys.exit(main())

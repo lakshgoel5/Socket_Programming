@@ -112,13 +112,12 @@ int main(int argc, char* argv[]) {
     }
     
     map<string, string> config;
-    try{
+    try {
         config = parse_config(filename);
     } catch (const exception& e) {
         cerr << "Error: Could not parse " << filename << ": " << e.what() << endl;
         return 1;
     }
-
     //override k and p if provided in command line
     if (!override_k.empty()) config["k"] = override_k;
     if (!override_p.empty()) config["p"] = override_p;
