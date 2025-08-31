@@ -7,7 +7,6 @@
 #include <arpa/inet.h> //address conversion functions
 #include <unistd.h> //low-level system call interface
 #include <cstring> //string manipulation functions
-#include <chrono>
 
 using namespace std;
 
@@ -158,21 +157,12 @@ int main(int argc, char* argv[]) {
     string k = config["k"];
     string p = config["p"];
     const string message = p + "," + k + "\n"; //message to be sent
-
-    //starting clock
-    auto start = std::chrono::high_resolution_clock::now();
-
     send(sock, message.c_str(), message.length(), 0); //socket descriptor, message in C style, length of the message, flags(0 for no special options)
     // cout << "Message sent: " << message << endl;
 
     //recv takes a charecter array as buffer
     char buffer[1024] = {0}; //1KB buffer for incoming data
     int bytes = recv(sock, buffer, sizeof(buffer)-1, 0); //receive data from server
-
-    //end clock time
-    auto end = std::chrono::high_resolution_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    cout << "ELAPSED_MS:" << elapsed << endl;
 
     close(sock);
 

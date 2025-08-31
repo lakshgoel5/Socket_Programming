@@ -40,13 +40,15 @@ def main():
             for r in range(1, RUNS_PER_K + 1):
                 modify_config("k", k) # should implement this function
                 cmd = CLIENT_CMD_TMPL
-                out = h1.cmd(cmd)
+                out = h1.cmd(cmd) #blocking command
+                # out is stdout/stderr of client command
                 # parse ELAPSED_MS
-                m = re.search(r"ELAPSED_MS:(\d+)", out)
+                m = re.search(r"ELAPSED_MS:(\d+)", out) #regex \d digit, + means one or more digits
+                #searches in "out" string
                 if not m:
                     print(f"[warn] No ELAPSED_MS found for k={k} run={r}. Raw:\n{out}")
                     continue
-                ms = int(m.group(1))
+                ms = int(m.group(1)) #extracts the part in the parentheses, wrapped in int()
                 with RESULTS_CSV.open("a", newline="") as f:
                     csv.writer(f).writerow([k, r, ms])
                 print(f"k={k} run={r} elapsed_ms={ms}")
