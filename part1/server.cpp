@@ -205,21 +205,21 @@ int main(int argc, char* argv[]){
         return 1;
     }
 
-    //program waits at this line until a client connects to the server
-    int client_fd = accept(sock, nullptr, nullptr); //returns client file descriptor
-    //All future communication with this specific client (like send() and recv()) will happen through this new client_fd, 
-    //while the original sock goes back to listening for other new clients.
+    while (true) {
+        //program waits at this line until a client connects to the server
+        int client_fd = accept(sock, nullptr, nullptr); //returns client file descriptor
+        //All future communication with this specific client (like send() and recv()) will happen through this new client_fd, 
+        //while the original sock goes back to listening for other new clients.
 
-    //We will have just one connection request in the backlog queue ------debug------
-    if (client_fd < 0) {
-        cerr << "Accept failed\n";
-        return 1;
+        if (client_fd < 0) {
+            cerr << "Accept failed\n";
+            continue; // don’t exit, keep listening
+        }
+
+        handle_client(client_fd, word_list);
+        close(client_fd);
     }
 
-    //-----debug----- check whether sock closed before or after accept
-    //process data
-    handle_client(client_fd, word_list);
-    close(client_fd);
     close(sock); //close the socket as we are done with it
 
 

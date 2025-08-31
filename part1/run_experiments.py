@@ -24,10 +24,9 @@ def modify_config(param, value):
 
 def main():
     # Prepare CSV
-    if not RESULTS_CSV.exists():
-        with RESULTS_CSV.open("w", newline="") as f:
-            w = csv.writer(f)
-            w.writerow(["k", "run", "elapsed_ms"])
+    with RESULTS_CSV.open("w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["k", "run", "elapsed_ms"])
 
     net = make_net()
     net.start()
