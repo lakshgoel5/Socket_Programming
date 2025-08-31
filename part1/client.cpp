@@ -96,7 +96,7 @@ int main(int argc, char* argv[]) {
     string filename = "config.json";
     string override_k = "";
     string override_p = "";
-    bool quiet = true;
+    bool quiet = false;
 
     for (int i = 1; i < argc; i++) {
         string arg = argv[i];
@@ -107,7 +107,7 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--p" && i + 1 < argc) {
             override_p = argv[++i];
         } else if(arg == "--quiet"){
-            quiet = false;
+            quiet = true;
         }
     }
     
@@ -183,7 +183,7 @@ int main(int argc, char* argv[]) {
         // cout << "Message received: " << buffer << endl;
         map<string, int> freq;
         analyse(buffer, freq);
-        if(quiet==true){
+        if(quiet==false){
             print(freq);
         }
     }

@@ -72,12 +72,13 @@ def main():
 
     server_ip = config.get("server_ip", "0.0.0.0")
     server_port = int(config.get("server_port", 5000))
+    num_clients = int(config.get("num_clients", 1))
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     server_socket.bind((server_ip, server_port))
-    server_socket.listen(1)
+    server_socket.listen(num_clients)
     print(f"Server listening on {server_ip}:{server_port}")
 
     try:
