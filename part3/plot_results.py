@@ -1,21 +1,29 @@
 #!/usr/bin/env python3
-import pandas as pd #load and manipulate csv
-import matplotlib.pyplot as plt #plots
-from pathlib import Path
-import math
+import pandas as pd
+import matplotlib.pyplot as plt
 
+# Load CSV
 df = pd.read_csv("results.csv")
-# Aggregate
-agg = df.groupby("num_clients")["avg_elapsed_ms"].agg(["mean", "std", "count"]).reset_index()
-# 95% CI using normal approx (n=5 is small, but acceptable for this assignment)
-agg["sem"] = agg["std"] / agg["count"].pow(0.5)
-agg["ci95"] = 1.96 * agg["sem"]
 
+# Jain's Fairness Index function
+def jfi(values):
+    values = values.to_numpy()  # ensure numpy array
+    numerator = (values.sum())**2
+    denominator = len(values) * (values**2).sum()
+    return numerator / denominator if denominator != 0 else 0
+
+# Group by c and compute JFI
+jfi_df = df.groupby("c")["elapsed_ms"].apply(jfi).reset_index()
+jfi_df.columns = ["c", "JFI"]  # rename for clarity
+
+print(jfi_df)  # 👈 see values before plotting
+
+# Plot
 plt.figure()
-plt.errorbar(agg["num_clients"], agg["mean"], yerr=agg["ci95"], fmt='o-', capsize=4)
-plt.xlabel("num_clients")
-plt.ylabel("Completion time (ms)")
-plt.title("Word Download Completion Time vs k (avg ± 95% CI, n=5)")
+plt.plot(jfi_df["c"].to_numpy(), jfi_df["JFI"].to_numpy(), marker='o')
+plt.xlabel("c")
+plt.ylabel("Jain's Fairness Index (JFI)")
+plt.title("Fairness (JFI) vs. c")
 plt.grid(True)
-plt.savefig("p2_plot.png", bbox_inches="tight", dpi=180)
-print("Saved p2_plot.png")
+plt.savefig("p3_plot.png", bbox_inches="tight", dpi=180)
+print("Saved p3_plot.png")

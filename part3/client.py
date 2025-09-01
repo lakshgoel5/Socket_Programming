@@ -95,7 +95,7 @@ def main():
     end = time.perf_counter()
 
     elapsed_ms = ((end-start)/c) * 1000 # gives the time per request, for one client
-    print(f"ELAPSED_MS: {elapsed_ms}")
+    print(f"ELAPSED_MS:{elapsed_ms}")
 
     sock.close()
 

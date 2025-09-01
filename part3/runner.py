@@ -25,7 +25,7 @@ def modify_config(param, value):
 def main():
     # always overwrite file fresh
     with RESULTS_CSV.open("w", newline="") as f:
-        csv.writer(f).writerow(["num_clients", "run", "elapsed_ms"])
+        csv.writer(f).writerow(["c", "run", "elapsed_ms"])
 
     num_clients = 10
     net = make_net(num_clients)
@@ -63,7 +63,7 @@ def main():
             if times:
                 avg = sum(times) / len(times)
                 with RESULTS_CSV.open("a", newline="") as f:
-                    csv.writer(f).writerow([num_clients, r, avg])
+                    csv.writer(f).writerow([c, r, avg])
                 print(f"c={c} run={r} elapsed_per_client_per_message_ms={avg:.2f}")
             else:
                 print(f"[warn] No times collected for c={c}, run={r}")
