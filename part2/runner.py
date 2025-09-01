@@ -37,7 +37,7 @@ def main():
         for r in range(1, RUNS_PER_SETTING + 1):
             procs = []
             outputs = []
-            modify_config("num_clients", num_clients)
+            modify_config("num_clients", 1)
             # launch clients concurrently
             for i in range(1,num_clients+1):
                 h_client = net.get(f'h{i}')  # or h1,h3,h4 if you made multiple hosts

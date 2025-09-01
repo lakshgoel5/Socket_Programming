@@ -5,5 +5,5 @@
   "p": 0,
   "filename": "words.txt",
   "num_iterations": 5,
-  "num_clients": 32
+  "num_clients": 1
 }
