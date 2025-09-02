@@ -39,9 +39,14 @@ def main():
             outputs = []
             modify_config("num_clients", num_clients)
             # launch clients concurrently
-            for i in range(1,num_clients+1):
+            for i in range(1, num_clients + 1):
                 h_client = net.get(f'h{i}')
-                cmd = CLIENT_CMD_TMPL.format(c=c)
+                if i == 1:
+                    # greedy client h1 sends c requests
+                    cmd = CLIENT_CMD_TMPL.format(c=c)
+                else:
+                    # all other clients send just 1 request
+                    cmd = CLIENT_CMD_TMPL.format(c=1)
                 p = h_client.popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 procs.append(p)
 
