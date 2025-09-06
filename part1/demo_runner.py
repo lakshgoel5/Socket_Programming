@@ -2,7 +2,7 @@
 import json, os, time, pathlib
 from topo_wordcount import make_net
 
-K = int(os.environ.get("K", "5"))
+K = int(os.environ.get("K", "4"))
 P = int(os.environ.get("P", "0"))
 
 # load base config and override p
@@ -18,6 +18,6 @@ srv = h2.popen("./server --config demo_config.json", shell=True)
 time.sleep(0.5)
 
 # run client once (no --quiet): prints word frequencies + ELAPSED_MS
-print(h1.cmd(f"./client --config demo_config.json --k {K}"))
+print(h1.cmd(f"./client --config demo_config.json --k {K} --quiet"))
 
 srv.terminate(); time.sleep(0.2); net.stop()

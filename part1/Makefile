@@ -26,10 +26,10 @@ client: $(CLIENT_OBJ)
 # sleep 1 to prevent race conditions
 # ------server not killed------
 run: build
-	./server &
-	PID=$$!
-	sleep 1
-	@echo "Running client with P=$(P), K=$(K)..."
-	P=$(P) K=$(K) ./client
+	./server & \
+	PID=$$!; \
+	sleep 1; \
+	echo "Running client with P=$(P), K=$(K)..."; \
+	P=$(P) K=$(K) ./client; \
 	kill $$PID
 	

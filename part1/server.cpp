@@ -96,46 +96,6 @@ bool load_words(const string filename, vector<string>& words){
     return true;
 }
 
-void handle_client(int client_fd, const vector<string>& word_list){
-    char bufferarray[1024] = {0};
-    int bytes_read = read(client_fd, bufferarray, sizeof(bufferarray) - 1);
-    bufferarray[bytes_read] = '\0';
-    string buffer(bufferarray);
-
-    if (bytes_read<=0) {
-        cerr << "Error: Could not read p and k" << endl;
-        return;
-    }
-    
-    int p, k;
-    if (!buffer.empty() && buffer.back() == '\n') {
-        buffer.pop_back();
-    }
-    size_t comma_pos = buffer.find(',');
-    if (comma_pos == std::string::npos) {
-        return; // invalid format
-    }
-    p = stoi(buffer.substr(0, comma_pos));
-    k = stoi(buffer.substr(comma_pos+1));
-
-    buffer.clear();
-    int pos;
-    int n = word_list.size();
-    for (pos = p ; pos<p+k && pos<n ; pos++) {
-        buffer += word_list[pos];
-        buffer += ",";
-    }
-
-    if (pos<p+k-1) {
-        buffer += "EOF\n";
-    }
-    else{
-        buffer.back() = '\n'; //replace last comma with newline
-    }
-
-    write(client_fd, buffer.c_str(), buffer.size());
-}
-
 int main(int argc, char* argv[]){
 
     // load config
@@ -197,7 +157,7 @@ int main(int argc, char* argv[]){
     }
 
     //passive listening state, ready to accept incoming requests
-    if (listen(sock, 1) < 0) {
+    if (listen(sock, 10) < 0) {
         //socket, backlog(max num of pending connections that can be queued)
         //in our case, we will handle one connection at a time
         //0->success, -1->failure
@@ -205,21 +165,56 @@ int main(int argc, char* argv[]){
         return 1;
     }
 
-    while (true) {
-        //program waits at this line until a client connects to the server
-        int client_fd = accept(sock, nullptr, nullptr); //returns client file descriptor
-        //All future communication with this specific client (like send() and recv()) will happen through this new client_fd, 
-        //while the original sock goes back to listening for other new clients.
-
-        if (client_fd < 0) {
-            cerr << "Accept failed\n";
-            continue; // don’t exit, keep listening
-        }
-
-        handle_client(client_fd, word_list);
-        close(client_fd);
+    //program waits at this line until a client connects to the server
+    int client_fd = accept(sock, nullptr, nullptr); //returns client file descriptor
+    //All future communication with this specific client (like send() and recv()) will happen through this new client_fd, 
+    //while the original sock goes back to listening for other new clients.
+    if (client_fd < 0) {
+        cerr << "Accept failed\n";
+        return 1;
     }
 
+    while (true) {
+        char bufferarray[1024] = {0};
+        int bytes_read = read(client_fd, bufferarray, sizeof(bufferarray) - 1);
+        bufferarray[bytes_read] = '\0';
+        string buffer(bufferarray);
+
+        if (bytes_read<=0) {
+            cerr << "Error: Could not read p and k" << endl;
+            return 0;
+        }
+        
+        //get p,k
+        int p, k;
+        if (!buffer.empty() && buffer.back() == '\n') {
+            buffer.pop_back();
+        }
+        size_t comma_pos = buffer.find(',');
+        if (comma_pos == std::string::npos) {
+            return 0; // invalid format
+        }
+        p = stoi(buffer.substr(0, comma_pos));
+        k = stoi(buffer.substr(comma_pos+1));
+
+        buffer.clear();
+        int pos = p;
+        int n = word_list.size();
+        for (pos = p ; pos<p+k && pos<n ; pos++) {
+            buffer += word_list[pos];
+            buffer += ",";
+        }
+
+        if (n<p+k) {
+            buffer += "EOF\n";
+        }
+        else{
+            buffer[buffer.size()-1] = '\n'; //replace last comma with newline
+        }
+
+        write(client_fd, buffer.c_str(), buffer.size());
+    }
+    close(client_fd);
     close(sock); //close the socket as we are done with it
 
 

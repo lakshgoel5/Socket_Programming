@@ -158,17 +158,34 @@ int main(int argc, char* argv[]) {
     //send and receive data
     string k = config["k"];
     string p = config["p"];
-    const string message = p + "," + k + "\n"; //message to be sent
+    string message = p + "," + k + "\n"; //message to be sent
 
     //starting clock
     auto start = std::chrono::high_resolution_clock::now();
+    string all_data;
+    int i=0;
+    while(true){
+        i++;
+        send(sock, message.c_str(), message.length(), 0); //socket descriptor, message in C style, length of the message, flags(0 for no special options)
+        // cout << "Message sent: " << message << endl;
+        //recv takes a charecter array as buffer
+        int bytes = 0;
+        char buffer[1024]; //1KB buffer for incoming data
+        bytes = recv(sock, buffer, sizeof(buffer)-1, 0);
 
-    send(sock, message.c_str(), message.length(), 0); //socket descriptor, message in C style, length of the message, flags(0 for no special options)
-    // cout << "Message sent: " << message << endl;
+        //process buffer received
+        buffer[bytes-1] = ',';
+        buffer[bytes] = '\0';
+        cout << buffer << " " << i << endl;
+        all_data.append(buffer);
+        if (strstr(buffer, "EOF") != NULL) {
+            break;
+        }
 
-    //recv takes a charecter array as buffer
-    char buffer[1024] = {0}; //1KB buffer for incoming data
-    int bytes = recv(sock, buffer, sizeof(buffer)-1, 0); //receive data from server
+        //increment p and create new message
+        p+=k;
+        message = p + "," + k + "\n"; //message to be sent
+    }
 
     //end clock time
     auto end = std::chrono::high_resolution_clock::now();
@@ -178,11 +195,14 @@ int main(int argc, char* argv[]) {
 
     close(sock);
 
-    if(bytes > 0){
-        buffer[bytes] = '\0'; //null terminate the received string
-        // cout << "Message received: " << buffer << endl;
+    if(!all_data.empty()){
+        all_data.pop_back();
+        // cout << "Message received: " << all_data << endl;
         map<string, int> freq;
-        analyse(buffer, freq);
+        char* cstr = new char[all_data.size()+1];
+        strcpy(cstr, all_data.c_str());
+        // cout << cstr << endl;
+        analyse(cstr, freq);
         if(quiet==false){
             print(freq);
         }
