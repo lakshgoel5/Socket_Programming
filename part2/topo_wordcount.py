@@ -1,44 +1,65 @@
-"""
-Custom Mininet topology for Part 2: (N clients) -- (1 switch) -- (1 server)
-"""
+#!/usr/bin/env python3
+
 from mininet.topo import Topo
+from mininet.net import Mininet
+from mininet.node import OVSSwitch
+from mininet.cli import CLI
+from mininet.log import setLogLevel
+from mininet.link import TCLink
 
-class Part2Topo(Topo):
-    "Star topology for Part 2 with N clients and 1 server."
+DEFAULT_CLIENTS = 4
+BANDWIDTH = 1        # Mbps
+DELAY = "5ms"        # example value, can be changed
+BUFFER_SIZE = 100    # packets
 
-    def build(self, n_clients=2):
-        # Add a single switch
-        switch = self.addSwitch('s1')
+class SimpleTopo(Topo):
+    "Star topology with 1 server, N clients, and 1 switch."
 
-        # Add the server host
-        server = self.addHost('h_server')
-        self.addLink(server, switch)
+    def __init__(self, num_clients=DEFAULT_CLIENTS):
+        Topo.__init__(self)
 
-        # Add N client hosts
-        for i in range(1, n_clients + 1):
-            client_host = self.addHost(f'h_client{i}')
-            self.addLink(client_host, switch)
+        # Create switch
+        switch = self.addSwitch('s1', cls=OVSSwitch)
 
-def make_net(n_clients=2):
-    """Factory function to create the network for experiments."""
-    from mininet.net import Mininet
-    from mininet.log import setLogLevel
-    setLogLevel('info')
+        # Create server (fixed IP at .100 for clarity)
+        server = self.addHost('server', ip='10.0.0.100')
 
-    topo = Part2Topo(n_clients=n_clients)
-    # Important: We need to use the 'host' link to ensure the server's IP is predictable
-    # The first host added ('h_server') will get 10.0.0.1
-    net = Mininet(topo=topo, host=CPULimitedHost, link=TCLink)
+        # Create clients
+        clients = []
+        for i in range(num_clients):
+            client_ip = f'10.0.0.{i+1}'
+            client = self.addHost(f'client{i+1}', ip=client_ip)
+            clients.append(client)
+
+        # Connect server to switch
+        self.addLink(server, switch, bw=BANDWIDTH, delay=DELAY, max_queue_size=BUFFER_SIZE)
+
+        # Connect each client to switch
+        for client in clients:
+            self.addLink(client, switch, bw=BANDWIDTH, delay=DELAY, max_queue_size=BUFFER_SIZE)
+
+
+def create_network(num_clients=DEFAULT_CLIENTS):
+    """Create and start the Part 2 network with hardcoded link params."""
+    topo = SimpleTopo(num_clients)
+    net = Mininet(topo=topo, switch=OVSSwitch, link=TCLink)
+    net.start()
     return net
 
-if __name__ == '__main__':
-    # This part is for debugging and allows you to run the topology directly
-    from mininet.cli import CLI
-    from mininet.link import TCLink
-    from mininet.node import CPULimitedHost
 
-    net = make_net(n_clients=4)
-    net.start()
-    print("Topology running. Server is h_server (10.0.0.1). Clients are h_client1, etc.")
+if __name__ == '__main__':
+    setLogLevel('info')
+
+    print(f"Creating network with {DEFAULT_CLIENTS} clients")
+    print(f"All links bandwidth: {BANDWIDTH} Mbps (hardcoded)")
+    print(f"All links delay: {DELAY}")
+    print(f"All links buffer: {BUFFER_SIZE} packets")
+
+    net = create_network()
+
+    print("Network created successfully!")
+    print("Hosts:", [h.name for h in net.hosts])
+    print("Links:", [(link.intf1.node, link.intf2.node) for link in net.links])
+
     CLI(net)
     net.stop()

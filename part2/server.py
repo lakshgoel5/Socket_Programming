@@ -11,7 +11,6 @@ def parse_config(filename):
         return json.load(f)
 
 def load_words(filename):
-    """Load comma-separated words into a list, append EOF marker"""
     words = []
     with open(filename, "r") as f:
         for line in f:
