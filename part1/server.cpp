@@ -164,53 +164,54 @@ int main(int argc, char* argv[]){
         return 1;
     }
 
-    //program waits at this line until a client connects to the server
-    int client_fd = accept(sock, nullptr, nullptr); //returns client file descriptor
-    //All future communication with this specific client (like send() and recv()) will happen through this new client_fd, 
-    //while the original sock goes back to listening for other new clients.
-    if (client_fd < 0) {
-        cerr << "Accept failed\n";
-        return 1;
+    while(true){
+        //program waits at this line until a client connects to the server
+        int client_fd = accept(sock, nullptr, nullptr); //returns client file descriptor
+        //All future communication with this specific client (like send() and recv()) will happen through this new client_fd, 
+        //while the original sock goes back to listening for other new clients.
+        if (client_fd < 0) {
+            cerr << "Accept failed\n";
+            return 1;
+        }
+
+        while (true) {
+            char bufferarray[1024] = {0};
+            int bytes_read = read(client_fd, bufferarray, sizeof(bufferarray) - 1);
+            bufferarray[bytes_read] = '\0';
+            string buffer(bufferarray);
+
+            if (bytes_read<=0) {
+                break;
+            }
+            
+            //get p,k
+            int p, k;
+            if (!buffer.empty() && buffer.back() == '\n') {
+                buffer.pop_back();
+            }
+            size_t comma_pos = buffer.find(',');
+            if (comma_pos == std::string::npos) {
+                return 0; // invalid format
+            }
+            p = stoi(buffer.substr(0, comma_pos));
+            k = stoi(buffer.substr(comma_pos+1));
+
+            buffer.clear();
+
+            for (int i = p; i < p + k && i < (int)word_list.size(); i++) {
+                buffer += word_list[i] + ",";
+            }
+
+            if (p + k > (int)word_list.size()) {
+                buffer += "EOF\n";
+            } else if (!buffer.empty()) {
+                buffer.back() = '\n'; // Replace last comma with newline
+            }
+
+            write(client_fd, buffer.c_str(), buffer.size());
+        }
+        close(client_fd);
     }
-
-    while (true) {
-        char bufferarray[1024] = {0};
-        int bytes_read = read(client_fd, bufferarray, sizeof(bufferarray) - 1);
-        bufferarray[bytes_read] = '\0';
-        string buffer(bufferarray);
-
-        if (bytes_read<=0) {
-            break;
-        }
-        
-        //get p,k
-        int p, k;
-        if (!buffer.empty() && buffer.back() == '\n') {
-            buffer.pop_back();
-        }
-        size_t comma_pos = buffer.find(',');
-        if (comma_pos == std::string::npos) {
-            return 0; // invalid format
-        }
-        p = stoi(buffer.substr(0, comma_pos));
-        k = stoi(buffer.substr(comma_pos+1));
-
-        buffer.clear();
-
-        for (int i = p; i < p + k && i < (int)word_list.size(); i++) {
-            buffer += word_list[i] + ",";
-        }
-
-        if (p + k > (int)word_list.size()) {
-            buffer += "EOF\n";
-        } else if (!buffer.empty()) {
-            buffer.back() = '\n'; // Replace last comma with newline
-        }
-
-        write(client_fd, buffer.c_str(), buffer.size());
-    }
-    close(client_fd);
     close(sock); //close the socket as we are done with it
-
 
 }
