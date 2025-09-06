@@ -159,6 +159,8 @@ int main(int argc, char* argv[]) {
     string k = config["k"];
     string p = config["p"];
     string message = p + "," + k + "\n"; //message to be sent
+    int p_int = stoi(p);
+    int k_int = stoi(k);
 
     //starting clock
     auto start = std::chrono::high_resolution_clock::now();
@@ -176,15 +178,15 @@ int main(int argc, char* argv[]) {
         //process buffer received
         buffer[bytes-1] = ',';
         buffer[bytes] = '\0';
-        cout << buffer << " " << i << endl;
         all_data.append(buffer);
         if (strstr(buffer, "EOF") != NULL) {
             break;
         }
 
         //increment p and create new message
-        p+=k;
-        message = p + "," + k + "\n"; //message to be sent
+        p_int+=k_int;
+        // cout << p << endl;
+        message = to_string(p_int) + "," + k + "\n"; //message to be sent
     }
 
     //end clock time

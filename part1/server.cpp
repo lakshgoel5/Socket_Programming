@@ -92,7 +92,6 @@ bool load_words(const string filename, vector<string>& words){
             words.push_back(word);
         }
     }
-    words.push_back("EOF"); //end of file marker
     return true;
 }
 
@@ -181,8 +180,7 @@ int main(int argc, char* argv[]){
         string buffer(bufferarray);
 
         if (bytes_read<=0) {
-            cerr << "Error: Could not read p and k" << endl;
-            return 0;
+            break;
         }
         
         //get p,k
@@ -198,18 +196,15 @@ int main(int argc, char* argv[]){
         k = stoi(buffer.substr(comma_pos+1));
 
         buffer.clear();
-        int pos = p;
-        int n = word_list.size();
-        for (pos = p ; pos<p+k && pos<n ; pos++) {
-            buffer += word_list[pos];
-            buffer += ",";
+
+        for (int i = p; i < p + k && i < (int)word_list.size(); i++) {
+            buffer += word_list[i] + ",";
         }
 
-        if (n<p+k) {
+        if (p + k > (int)word_list.size()) {
             buffer += "EOF\n";
-        }
-        else{
-            buffer[buffer.size()-1] = '\n'; //replace last comma with newline
+        } else if (!buffer.empty()) {
+            buffer.back() = '\n'; // Replace last comma with newline
         }
 
         write(client_fd, buffer.c_str(), buffer.size());
@@ -218,5 +213,4 @@ int main(int argc, char* argv[]){
     close(sock); //close the socket as we are done with it
 
 
-    cout << "Server listening on port " << server_port << endl;
 }

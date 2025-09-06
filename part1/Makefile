@@ -26,10 +26,13 @@ client: $(CLIENT_OBJ)
 # sleep 1 to prevent race conditions
 # ------server not killed------
 run: build
-	./server & \
-	PID=$$!; \
-	sleep 1; \
-	echo "Running client with P=$(P), K=$(K)..."; \
-	P=$(P) K=$(K) ./client; \
-	kill $$PID
-	
+	sudo python3 demo_runner.py
+
+experiments: build
+	sudo python3 run_experiments.py
+
+plot: experiments
+	python3 plot_results.py
+
+clean:
+	rm -f server client *.o *.log results.csv demo_config.json
