@@ -1,26 +1,44 @@
-#!/usr/bin/env python3
+"""
+Custom Mininet topology for Part 2: (N clients) -- (1 switch) -- (1 server)
+"""
 from mininet.topo import Topo
-from mininet.net import Mininet
-from mininet.node import OVSController
-from mininet.link import TCLink
 
-class WordCountTopo(Topo):
-    def build(self, num_clients):  # allow variable number of clients
-        s1 = self.addSwitch('s1')
+class Part2Topo(Topo):
+    "Star topology for Part 2 with N clients and 1 server."
 
-        # Add server
-        sv = self.addHost('sv', ip='10.0.0.1/24')
-        self.addLink(sv, s1, cls=TCLink, bw=100)
+    def build(self, n_clients=2):
+        # Add a single switch
+        switch = self.addSwitch('s1')
 
-        # Add variable number of clients
-        for i in range(1, num_clients + 1):
-            h = self.addHost(f'h{i}', ip=f'10.0.0.{i+1}/24')
-            self.addLink(h, s1, cls=TCLink, bw=100)
+        # Add the server host
+        server = self.addHost('h_server')
+        self.addLink(server, switch)
 
-def make_net(num_clients):
-    return Mininet(
-        topo=WordCountTopo(num_clients=num_clients),
-        controller=OVSController,
-        autoSetMacs=True,
-        autoStaticArp=True
-    )
+        # Add N client hosts
+        for i in range(1, n_clients + 1):
+            client_host = self.addHost(f'h_client{i}')
+            self.addLink(client_host, switch)
+
+def make_net(n_clients=2):
+    """Factory function to create the network for experiments."""
+    from mininet.net import Mininet
+    from mininet.log import setLogLevel
+    setLogLevel('info')
+
+    topo = Part2Topo(n_clients=n_clients)
+    # Important: We need to use the 'host' link to ensure the server's IP is predictable
+    # The first host added ('h_server') will get 10.0.0.1
+    net = Mininet(topo=topo, host=CPULimitedHost, link=TCLink)
+    return net
+
+if __name__ == '__main__':
+    # This part is for debugging and allows you to run the topology directly
+    from mininet.cli import CLI
+    from mininet.link import TCLink
+    from mininet.node import CPULimitedHost
+
+    net = make_net(n_clients=4)
+    net.start()
+    print("Topology running. Server is h_server (10.0.0.1). Clients are h_client1, etc.")
+    CLI(net)
+    net.stop()
