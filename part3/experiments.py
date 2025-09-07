@@ -14,7 +14,7 @@ import subprocess
 import pandas as pd
 import matplotlib.pyplot as plt
 
-OUTPUT_PLOT = "p2_plot.png"
+OUTPUT_PLOT_JFI = "p2_plot.png"
 
 RESULTS_CSV = Path("results.csv")
 SERVER_CMD = "python3 server.py --config config.json"
@@ -116,7 +116,7 @@ class Runner:
             for r in range(1, runs_per_count + 1):
                 self.run_experiment(n, r)
 
-    def generate_plots(self):
+    def generate_plots():
         """
         Loads data from RESULTS_CSV and generates plots for completion time and JFI.
         """
@@ -151,18 +151,18 @@ class Runner:
             except OSError:
                 print("Warning: Fallback style 'seaborn-whitegrid' not found. Using default style.")
 
-        # --- Plot 1: Average Completion Time ---
-        fig1, ax1 = plt.subplots(figsize=(10, 6))
-        ax1.errorbar(agg_time["num_clients"], agg_time["mean"], yerr=agg_time["ci95"], fmt='o-', capsize=5, label="Average Time ± 95% CI")
-        ax1.set_xlabel("Number of Concurrent Clients", fontsize=12)
-        ax1.set_ylabel("Average Completion Time per Client (ms)", fontsize=12)
-        ax1.set_title(f"Server Performance vs. Number of Clients (n={run_count} runs)", fontsize=14, fontweight='bold')
-        ax1.legend()
-        ax1.grid(True, which='both', linestyle='--', linewidth=0.5)
-        ax1.set_xticks(agg_time["num_clients"])
+        fig2, ax2 = plt.subplots(figsize=(10, 6))
+        ax2.plot(agg_jfi["num_clients"], agg_jfi["mean"], marker='s', linestyle='--', label="Average Jain's Fairness Index (JFI)", color='g')
+        ax2.set_xlabel("Number of Concurrent Clients", fontsize=12)
+        ax2.set_ylabel("Jain's Fairness Index (JFI)", fontsize=12)
+        ax2.set_title(f"Network Fairness vs. Number of Clients (n={run_count} runs)", fontsize=14, fontweight='bold')
+        ax2.set_xticks(agg_jfi["num_clients"])
+        ax2.set_ylim(0, 1.1)
+        ax2.legend()
+        ax2.grid(True, which='both', linestyle='--', linewidth=0.5)
         plt.tight_layout()
-        plt.savefig(OUTPUT_PLOT, dpi=180)
-        print(f"Completion time plot saved to {OUTPUT_PLOT}")
+        plt.savefig(OUTPUT_PLOT_JFI, dpi=180)
+        print(f"JFI plot saved to {OUTPUT_PLOT_JFI}")
 
 
 
@@ -183,7 +183,7 @@ def main():
     args = parser.parse_args()
 
     # Conditional execution based on flags
-    if args.experiments:
+    if args.run:
         runner = Runner()
         client_counts = [1, 5, 9, 13, 17, 21, 25, 29, 32]
         runner.run_all(client_counts, runs_per_count=5)
@@ -193,7 +193,7 @@ def main():
         runner.generate_plots()
 
     # If no arguments are provided, show help message
-    if not args.experiments and not args.plot:
+    if not args.run and not args.plot:
         parser.print_help()
 
 

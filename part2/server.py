@@ -4,7 +4,19 @@ import threading
 import queue #for making queue
 import sys
 import json
+import argparse
 import time
+
+import signal
+
+stop_server = False
+
+def handle_sigterm(signum, frame):
+    global stop_server
+    print("Received termination signal. Shutting down server...")
+    stop_server = True
+
+signal.signal(signal.SIGTERM, handle_sigterm)
 
 def parse_config(filename):
     with open(filename, "r") as f:
@@ -19,6 +31,11 @@ def load_words(filename):
                 if w:
                     words.append(w)
     return words
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Word Counting Client")
+    parser.add_argument("--config", type=str, default="config.json", help="Path to config file")
+    return parser.parse_args()
 
 def processing_worker():
     """
@@ -99,7 +116,11 @@ def handle_client(client_socket, client_address):
 
 def main():
     global word_list #Use the global one instead
-    config = parse_config("config.json")
+    args = parse_args()
+    file = args.config
+    if(not args.config):
+        file = "config.json"
+    config = parse_config(file)
     if not config:
         return 1
     
@@ -122,17 +143,20 @@ def main():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind((server_ip, server_port))
-    server_socket.listen(num_clients, num_clients+5)
+    server_socket.listen(num_clients+5)
     print(f"Server listening on {server_ip}:{server_port}")
 
     try:
-        while True:
-            client_socket, client_address = server_socket.accept() #accept a connection and create a new thread to handle it
-            handler_thread = threading.Thread(
-                target=handle_client,
-                args=(client_socket, client_address)
-            )
-            handler_thread.start()
+        while not stop_server:
+            try:
+                client_socket, client_address = server_socket.accept()
+                handler_thread = threading.Thread(
+                    target=handle_client,
+                    args=(client_socket, client_address)
+                )
+                handler_thread.start()
+            except OSError:
+                break
     except KeyboardInterrupt:
         print("Server shutting down.")
     finally:

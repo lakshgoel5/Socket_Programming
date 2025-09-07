@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-RESULTS_FILE = "results_part2.csv"
+RESULTS_FILE = "results.csv"
 OUTPUT_PLOT = "p2_plot.png"
 
 # Check if the results file exists

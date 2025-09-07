@@ -7,54 +7,59 @@ from mininet.cli import CLI
 from mininet.log import setLogLevel
 from mininet.link import TCLink
 
-# Default number of clients
-DEFAULT_CLIENTS = 10
-# =============================================================================
+DEFAULT_CLIENTS = 4
+BANDWIDTH = 1        # Mbps
+DELAY = "5ms"        # example value, can be changed
+BUFFER_SIZE = 100    # packets
 
 class SimpleTopo(Topo):
+    "Star topology with 1 server, N clients, and 1 switch."
+
     def __init__(self, num_clients=DEFAULT_CLIENTS):
         Topo.__init__(self)
-        
+
         # Create switch
         switch = self.addSwitch('s1', cls=OVSSwitch)
-        
-        # Create server
+
+        # Create server (fixed IP at .100 for clarity)
         server = self.addHost('server', ip='10.0.0.100')
-        
+
         # Create clients
         clients = []
         for i in range(num_clients):
-            client = self.addHost(f'client{i+1}', ip=f'10.0.0.{i+1}')
+            client_ip = f'10.0.0.{i+1}'
+            client = self.addHost(f'client{i+1}', ip=client_ip)
             clients.append(client)
-        
-        # Connect server to switch with hardcoded bandwidth=1
-        self.addLink(server, switch, bw=1)
-        
-        # Connect all clients to switch with hardcoded bandwidth=1
+
+        # Connect server to switch
+        self.addLink(server, switch, bw=BANDWIDTH, delay=DELAY, max_queue_size=BUFFER_SIZE)
+
+        # Connect each client to switch
         for client in clients:
-            self.addLink(client, switch, bw=1)
+            self.addLink(client, switch, bw=BANDWIDTH, delay=DELAY, max_queue_size=BUFFER_SIZE)
+
 
 def create_network(num_clients=DEFAULT_CLIENTS):
-    """Create and start the network with hardcoded bandwidth=1 for all links"""
+    """Create and start the Part 2 network with hardcoded link params."""
     topo = SimpleTopo(num_clients)
     net = Mininet(topo=topo, switch=OVSSwitch, link=TCLink)
     net.start()
     return net
 
+
 if __name__ == '__main__':
     setLogLevel('info')
-    
-    # Test with hardcoded configuration
+
     print(f"Creating network with {DEFAULT_CLIENTS} clients")
     print(f"All links bandwidth: {BANDWIDTH} Mbps (hardcoded)")
     print(f"All links delay: {DELAY}")
     print(f"All links buffer: {BUFFER_SIZE} packets")
-    
-    net = create_network()  # Uses hardcoded values
-    
+
+    net = create_network()
+
     print("Network created successfully!")
     print("Hosts:", [h.name for h in net.hosts])
     print("Links:", [(link.intf1.node, link.intf2.node) for link in net.links])
-    
+
     CLI(net)
     net.stop()
