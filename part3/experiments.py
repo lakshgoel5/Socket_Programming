@@ -14,7 +14,7 @@ import subprocess
 import pandas as pd
 import matplotlib.pyplot as plt
 
-OUTPUT_PLOT_JFI = "p2_plot.png"
+OUTPUT_PLOT_JFI = "p3_plot.png"
 
 RESULTS_CSV = Path("results.csv")
 SERVER_CMD = "python3 server.py --config config.json"
