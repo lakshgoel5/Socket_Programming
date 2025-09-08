@@ -4,7 +4,7 @@ import json
 import subprocess
 from pathlib import Path
 import sys
-from topo_wordcount import make_net
+from topo_wordcount import create_network
 
 SERVER_CMD = "python3 server.py --config config.json"
 CLIENT_CMD_BASE = "python3 client.py --config config.json"
@@ -16,11 +16,14 @@ c = int(base_config.get("c", 1))  # desired greedy batch size
 print(f"--- Starting demo with {num_clients} concurrent clients ---")
 
 # Mininet
-net = make_net()
+net = create_network()
 net.start()
 
-server_host = net.get('h1')
-client_host = net.get('h2')
+server_host = net.get('server')
+#List of client hosts
+client_host = []
+for i in range(num_clients):
+    client_host.append(net.get(f'client{i+1}'))
 
 # Start server
 server_proc = server_host.popen(SERVER_CMD, shell=True)
@@ -36,23 +39,21 @@ else:
 start_time = time.time()
 
 # Start clients concurrently: one greedy client, rest normal
-client_procs = []
+normal_procs = []
 
 # Greedy client (first)
 greedy_cmd = f"{CLIENT_CMD_BASE} --is_greedy --c {c}"
-client_procs.append(
-    client_host.popen(
-        greedy_cmd,
-        shell=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
-    )
+rogue_proc = client_host[0].popen(
+    greedy_cmd,
+    shell=True,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE
 )
 
 # Non-greedy clients
-for _ in range(num_clients - 1):
-    client_procs.append(
-        client_host.popen(
+for i in range(1, num_clients):
+    normal_procs.append(
+        client_host[i].popen(
             CLIENT_CMD_BASE,
             shell=True,
             stdout=subprocess.PIPE,
@@ -60,8 +61,23 @@ for _ in range(num_clients - 1):
         )
     )
 
+stdout, stderr = rogue_proc.communicate()
+if isinstance(stdout, bytes):
+    try:
+        decoded = stdout.decode()
+    except Exception:
+        decoded = stdout.decode(errors='ignore')
+else:
+    decoded = stdout
+print(f"\n--- Output from Client {i} ---")
+print(decoded)
+if stderr:
+    print(f"Errors:\n{stderr}")
+print(f"Client {i} completed with return code {rogue_proc.returncode}")
+
+
 # Wait for all clients to finish and print their output
-for i, proc in enumerate(client_procs, 1):
+for i, proc in enumerate(normal_procs):
     stdout, stderr = proc.communicate()
     # outputs are bytes; decode for printing
     if isinstance(stdout, bytes):

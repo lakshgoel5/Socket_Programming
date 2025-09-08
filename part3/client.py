@@ -3,15 +3,14 @@ import argparse
 import socket
 import time
 import json
+import sys
+import errno
 
 def parse_config(filename):
     with open(filename, "r") as f:
         return json.load(f)
 
 def print_freq(freq):
-    """
-    Prints the frequency dictionary as 'word, count' lines.
-    """
     items = list(freq.items())
     for i, (word, count) in enumerate(items):
         end_char = '\n' if i < len(items) - 1 else ''
@@ -25,7 +24,14 @@ def parse_args():
     parser.add_argument("--quiet", action="store_true", help="Toggle verbose output off")
     parser.add_argument("--is_greedy", action="store_true", help="Set this client as the greedy client")
     parser.add_argument("--c", type=int, default=1, help="Number of requests to send in a batch for the greedy client")
+    parser.add_argument("--retries", type=int, default=5, help="Reconnect retries on connection failure")
     return parser.parse_args()
+
+def make_socket(server_ip, server_port, timeout=5.0):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(timeout)
+    s.connect((server_ip, server_port))
+    return s
 
 def main():
     args = parse_args()
@@ -44,75 +50,118 @@ def main():
     k = int(config.get("k", "5"))
 
     is_greedy = args.is_greedy
-    c = max(1, int(args.c))  # ensure at least 1
+    c = max(1, int(args.c))
+    max_retries = int(args.retries)
 
     word_frequency = {}
     all_words_buffer = []
-
-    # Create TCP socket and connect
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect((server_ip, server_port))
-    except Exception as e:
-        print(f"Connection failed: {e}")
-        return 1
-
-    start = time.perf_counter()
+    received_buffer = ""  # persistent between reconnects
     eof_received = False
 
+    # Create initial socket (may fail and be retried below)
+    sock = None
+    try:
+        sock = make_socket(server_ip, server_port)
+    except Exception as e:
+        # We'll attempt reconnects later when needed
+        sock = None
+
+    start = time.perf_counter()
+
+    # Keep requesting until server signals EOF
     while not eof_received:
-        # Determine how many requests to send in this batch
         requests_to_send = c if is_greedy else 1
 
-        # Send requests back-to-back (or until EOF would be reached in client's logic)
+        # ensure we have a connected socket before sending
+        if sock is None:
+            # try to reconnect up to max_retries
+            retries = 0
+            while retries < max_retries and sock is None:
+                try:
+                    sock = make_socket(server_ip, server_port)
+                except Exception:
+                    retries += 1
+                    time.sleep(0.1 * retries)
+            if sock is None:
+                print("Failed to connect after retries; aborting.")
+                break
+
+        # send up to requests_to_send messages; stop early if connection dies
         sent = 0
         for _ in range(requests_to_send):
-            # prepare message and send
             message = f"{p},{k}\n".encode('utf-8')
             try:
                 sock.sendall(message)
-            except BrokenPipeError:
-                # server closed connection unexpectedly
-                eof_received = True
+            except (BrokenPipeError, ConnectionResetError, OSError) as e:
+                # connection died while sending; close and mark sock=None to reconnect
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+                sock = None
                 break
+            # only increment p after successful send
             sent += 1
-            p += k  # move offset as if the requests were accepted
-        if sent == 0:
-            break
+            p += k
 
-        # For each request sent, read exactly one response line (server responds per request)
-        for _ in range(sent):
-            response_data = ""
-            while not response_data.endswith('\n'):
+        if sent == 0:
+            # nothing sent this iteration (connection died); loop will reconnect and retry
+            continue
+
+        # Read 'sent' responses (or stop early on EOF or connection close)
+        processed = 0
+        while processed < sent and not eof_received:
+            try:
                 chunk = sock.recv(4096)
                 if not chunk:
-                    # server closed connection unexpectedly
-                    eof_received = True
+                    # peer closed connection gracefully
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
+                    sock = None
                     break
-                response_data += chunk.decode('utf-8')
-            if not response_data:
+                received_buffer += chunk.decode('utf-8')
+
+                # process complete lines
+                while '\n' in received_buffer and processed < sent:
+                    line, _, received_buffer = received_buffer.partition('\n')
+
+                    # check EOF marker
+                    if line.endswith("EOF"):
+                        eof_received = True
+                        line = line[:-3].strip(',')
+
+                    if line:
+                        received_words = [w for w in line.split(',') if w]
+                        all_words_buffer.extend(received_words)
+
+                    processed += 1
+
+                    if eof_received:
+                        break
+
+            except socket.timeout:
+                # No data right now; break to allow reconnect or resend if needed
+                break
+            except (ConnectionResetError, OSError) as e:
+                # connection was reset; close and set sock to None to reconnect
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+                sock = None
                 break
 
-            response_line = response_data.strip()
-
-            if response_line.endswith("EOF"):
-                eof_received = True
-                response_line = response_line[:-3].strip(',')
-
-            if response_line:
-                received_words = [w for w in response_line.split(',') if w]
-                all_words_buffer.extend(received_words)
-
-            if eof_received:
-                break
-
+    # ensure socket closed
     try:
-        sock.close()
+        if sock:
+            sock.close()
     except Exception:
         pass
 
-    end_time = time.perf_counter()
-    elapsed_ms = (end_time - start) * 1000
+    end = time.perf_counter()
+    elapsed_ms = (end - start) * 1000
     print(f"ELAPSED_MS:{elapsed_ms}")
 
     for word in all_words_buffer:
@@ -124,5 +173,4 @@ def main():
     return 0
 
 if __name__ == "__main__":
-    import sys
     sys.exit(main())

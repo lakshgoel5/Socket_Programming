@@ -30,6 +30,7 @@ class Runner:
         self.port = self.config['server_port']
         self.p = self.config['p']  # offset
         self.k = self.config['k']  # words per request
+        self.num_client = self.config['num_clients']
 
     def calculate_jfi(self, values):
         if not values:
@@ -47,80 +48,87 @@ class Runner:
         print("Cleaned old logs")
 
     def run_experiment(self, n_clients, run_id, c):
-        from topo_wordcount import make_net
+        from topo_wordcount import create_network
 
         # always creates h1 (clients) and h2 (server)
-        net = make_net()
+        net = create_network()
         net.start()
 
-        server_host = net.get('h1')
-        client_host = net.get('h2')
+        try:
+            server_host = net.get('server')
+            client_host = []
+            for i in range(self.num_clients):
+                client_host.append(net.get(f'client{i+1}'))
 
-        # start server
-        server_proc = server_host.popen(SERVER_CMD, shell=True)
-        time.sleep(2)
+            # start server
+            server_proc = server_host.popen(SERVER_CMD, shell=True)
+            time.sleep(2)
 
-        if server_proc.poll() is not None:
-            print("[ERROR] server failed to start")
-            net.stop()
-            return
+            if server_proc.poll() is not None:
+                print("[ERROR] server failed to start")
+                net.stop()
+                return
 
-        # launch all clients on h1
-        greedy_cmd = f"{CLIENT_CMD} --is_greedy --c {c}"
-        client_procs = []
-        # first greedy
-        client_procs.append(
-            client_host.popen(
+            # launch all clients on h1
+            greedy_cmd = f"{CLIENT_CMD} --is_greedy --c {c}"
+            normal_procs = []
+            # first greedy
+            rogue_proc = client_host[0].popen(
                 greedy_cmd,
                 shell=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
-        )
-        # remaining non-greedy clients
-        for _ in range(n_clients - 1):
-            client_procs.append(
-                client_host.popen(
-                    CLIENT_CMD,
-                    shell=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
+
+            # Non-greedy clients
+            for i in range(1, self.num_clients):
+                normal_procs.append(
+                    client_host[i].popen(
+                        CLIENT_CMD,
+                        shell=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
+                    )
                 )
-            )
 
-        run_times = []
-        for proc in client_procs:
-            out, _ = proc.communicate()
-            if isinstance(out, bytes):
-                out = out.decode('utf-8', errors='ignore')
-            m = re.search(r"ELAPSED_MS:([\d\.]+)", out)
-            if m:
-                run_times.append(float(m.group(1)))
+            rogue_proc.wait()
+            run_times = []
+            for proc in normal_procs:
+                # out, _ = proc.communicate()
+                # if isinstance(out, bytes):
+                #     out = out.decode('utf-8', errors='ignore')
+                # m = re.search(r"ELAPSED_MS:([\d\.]+)", out)
+                # if m:
+                #     run_times.append(float(m.group(1)))
+                proc.wait()
 
-        # cleanup server
-        try:
-            server_proc.terminate()
-            server_proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            server_proc.kill()
+            # cleanup server
+            try:
+                server_proc.terminate()
+                server_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                server_proc.kill()
+            time.sleep(1)
 
-        # cleanup clients
-        for proc in client_procs:
-            if proc.poll() is None:
-                proc.kill()
+            # # cleanup clients
+            # for proc in normal_procs:
+            #     if proc.poll() is None:
+            #         proc.kill()
+            results = self.parse_logs()
+        finally:
+            net.stop()
 
-        net.stop()
-
-        # record results
-        if run_times:
-            avg_time = mean(run_times)
-            jfi = self.calculate_jfi(run_times)
-            # IMPORTANT: write row matching header ["num_clients","c","run","avg_completion_time_ms","jfi"]
-            with RESULTS_CSV.open("a", newline="") as f:
-                csv.writer(f).writerow([n_clients, c, run_id, avg_time, jfi])
-            print(f"[INFO] n_clients={n_clients}, c={c}, run={run_id}, avg={avg_time:.2f}, jfi={jfi:.3f}")
-        else:
-            print(f"[WARN] No client times recorded for n_clients={n_clients}, c={c}, run={run_id}")
+        #use results
+        # # record results
+        # if run_times:
+        #     avg_time = mean(run_times)
+        #     jfi = self.calculate_jfi(run_times)
+        #     # IMPORTANT: write row matching header ["num_clients","c","run","avg_completion_time_ms","jfi"]
+        #     with RESULTS_CSV.open("a", newline="") as f:
+        #         csv.writer(f).writerow([n_clients, c, run_id, avg_time, jfi])
+        #     print(f"[INFO] n_clients={n_clients}, c={c}, run={run_id}, avg={avg_time:.2f}, jfi={jfi:.3f}")
+        # else:
+        #     print(f"[WARN] No client times recorded for n_clients={n_clients}, c={c}, run={run_id}")
 
     def run_all(self, client_counts, runs_per_count, c_values):
         with RESULTS_CSV.open("w", newline="") as f:
