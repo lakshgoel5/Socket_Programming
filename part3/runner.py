@@ -1,80 +1,90 @@
 #!/usr/bin/env python3
-import re
 import time
-import csv
-from pathlib import Path
-from topo_wordcount import make_net
+import json
 import subprocess
+from pathlib import Path
+import sys
+from topo_wordcount import make_net
 
-# Config
-NUM_CLIENTS_VALUES = [10]
-RUNS_PER_SETTING = 5
 SERVER_CMD = "python3 server.py --config config.json"
-CLIENT_CMD_TMPL = "python3 -u client.py --config config.json --quiet --c {c}"
+CLIENT_CMD_BASE = "python3 client.py --config config.json"
 
-RESULTS_CSV = Path("results.csv")
+base_config = json.loads(Path("config.json").read_text())
+num_clients = base_config["num_clients"]
+c = int(base_config.get("c", 1))  # desired greedy batch size
 
-def modify_config(param, value):
-    import json
-    with open("config.json", "r") as f:
-        cfg = json.load(f)
-    cfg[param] = value
-    with open("config.json", "w") as f:
-        json.dump(cfg, f, indent=2)
+print(f"--- Starting demo with {num_clients} concurrent clients ---")
 
-def main():
-    # always overwrite file fresh
-    with RESULTS_CSV.open("w", newline="") as f:
-        csv.writer(f).writerow(["c", "run", "elapsed_ms"])
+# Mininet
+net = make_net()
+net.start()
 
-    num_clients = 10
-    net = make_net(num_clients)
-    net.start()
-    h_server = net.get('sv')
-    srv = h_server.popen(SERVER_CMD, shell=True, stdout=None, stderr=None)
-    for c in range(1,11):
-        time.sleep(0.5)  # let server bind
-        for r in range(1, RUNS_PER_SETTING + 1):
-            procs = []
-            outputs = []
-            modify_config("num_clients", num_clients)
-            # launch clients concurrently
-            for i in range(1, num_clients + 1):
-                h_client = net.get(f'h{i}')
-                if i == 1:
-                    # greedy client h1 sends c requests
-                    cmd = CLIENT_CMD_TMPL.format(c=c)
-                else:
-                    # all other clients send just 1 request
-                    cmd = CLIENT_CMD_TMPL.format(c=1)
-                p = h_client.popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                procs.append(p)
+server_host = net.get('h1')
+client_host = net.get('h2')
 
-            # collect results
-            for p in procs:
-                out = p.stdout.read()
-                outputs.append(out.decode())
+# Start server
+server_proc = server_host.popen(SERVER_CMD, shell=True)
+time.sleep(2) # Wait for server to bind
 
-            # terminate clients
-            for p in procs:
-                p.terminate()
-
-            times = []
-            for out in outputs:
-                m = re.search(r"ELAPSED_MS:(\d+\.?\d*)", out)
-                if m:
-                    times.append(float(m.group(1)))
-
-            if times:
-                avg = sum(times) / len(times)
-                with RESULTS_CSV.open("a", newline="") as f:
-                    csv.writer(f).writerow([c, r, avg])
-                print(f"c={c} run={r} elapsed_per_client_per_message_ms={avg:.2f}")
-            else:
-                print(f"[warn] No times collected for c={c}, run={r}")
-
-    srv.terminate()
+if server_proc.poll() is None:  # still running → started successfully
+    print(f"[DEBUG] server_proc process started successfully (PID: {server_proc.pid})")
+else:
+    print(f"[ERROR] server_proc failed to start. Return code: {server_proc.returncode}")
     net.stop()
+    sys.exit(1)
 
-if __name__ == "__main__":
-    main()
+start_time = time.time()
+
+# Start clients concurrently: one greedy client, rest normal
+client_procs = []
+
+# Greedy client (first)
+greedy_cmd = f"{CLIENT_CMD_BASE} --is_greedy --c {c}"
+client_procs.append(
+    client_host.popen(
+        greedy_cmd,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+)
+
+# Non-greedy clients
+for _ in range(num_clients - 1):
+    client_procs.append(
+        client_host.popen(
+            CLIENT_CMD_BASE,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+    )
+
+# Wait for all clients to finish and print their output
+for i, proc in enumerate(client_procs, 1):
+    stdout, stderr = proc.communicate()
+    # outputs are bytes; decode for printing
+    if isinstance(stdout, bytes):
+        try:
+            decoded = stdout.decode()
+        except Exception:
+            decoded = stdout.decode(errors='ignore')
+    else:
+        decoded = stdout
+    print(f"\n--- Output from Client {i} ---")
+    print(decoded)
+    if stderr:
+        print(f"Errors:\n{stderr}")
+    print(f"Client {i} completed with return code {proc.returncode}")
+
+end_time = time.time()
+total_time = end_time - start_time
+
+print(f"All {num_clients} clients completed in {total_time:.2f} seconds")
+
+# Clean up
+print("\nDemo finished. Shutting down...")
+server_proc.terminate()
+time.sleep(0.5)
+net.stop()
+print("\nExperiment Successful")
