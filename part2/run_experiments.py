@@ -23,7 +23,6 @@ def modify_config(param, value):
         json.dump(cfg, f, indent=2)
 
 def main():
-    # Prepare CSV
     with RESULTS_CSV.open("w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["num_clients", "run", "client_id", "elapsed_ms"])
@@ -31,28 +30,25 @@ def main():
     net = make_net()
     net.start()
 
-    h1 = net.get('h1')  # client host
-    h2 = net.get('h2')  # server host
+    h1 = net.get('h1')
+    h2 = net.get('h2')
 
-    # Ensure words.txt exists (shared FS)
     if not Path("words.txt").exists():
         Path("words.txt").write_text("cat,bat,cat,dog,dog,emu,emu,emu,ant\n")
 
     try:
         for num_clients in NUM_CLIENTS_VALUES:
             for r in range(1, RUNS_PER_SETTING + 1):
-                # restart server fresh each run
                 srv = h2.popen(SERVER_CMD, shell=True, stdout=None, stderr=None)
-                time.sleep(2)  # give it time to bind
+                time.sleep(2) 
 
-                # launch clients in parallel
+                # launch clients
                 procs = []
                 for cid in range(num_clients):
                     cmd = CLIENT_CMD_TMPL
                     p = h1.popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     procs.append((cid, p))
 
-                # collect results
                 for cid, p in procs:
                     out, err = p.communicate()
                     out = out.decode()

@@ -10,6 +10,7 @@ experiments:
 
 plot:
 	sudo mn -c
+	sudo python3 run_experiments.py
 	python3 plot_part2.py
 
 clean:

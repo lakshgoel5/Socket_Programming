@@ -49,14 +49,13 @@ def main():
     server_ip = cfg["server_ip"]
     server_port = int(cfg["server_port"])
 
-    # create TCP socket
     server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_sock.bind((server_ip, server_port))
-    server_sock.listen(32)  # backlog
+    server_sock.listen(32) 
     server_sock.setblocking(False)
 
-    sockets = [server_sock]  # list of sockets we monitor
+    sockets = [server_sock] 
 
     print(f"Concurrent server listening on {server_ip}:{server_port}")
 
@@ -64,7 +63,6 @@ def main():
         read_list, _, _ = select.select(sockets, [], [])
         for sock in read_list:
             if sock is server_sock:
-                # new connection
                 conn, addr = server_sock.accept()
                 conn.setblocking(False)
                 sockets.append(conn)
@@ -75,7 +73,6 @@ def main():
                         response = process_request(data, word_list)
                         sock.sendall(response.encode())
                     else:
-                        # only close if client closed connection
                         sockets.remove(sock)
                         sock.close()
                 except Exception:
