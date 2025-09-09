@@ -32,12 +32,30 @@ class Runner:
         self.k = self.config['k']  # words per request
 
     def calculate_jfi(self, values):
+        """(Kept for compatibility) computes JFI directly on values (not used for ms -> throughput)."""
         if not values:
             return 0.0
         n = len(values)
         s = sum(values)
         sq_sum = sum(v * v for v in values)
         return (s * s) / (n * sq_sum) if sq_sum > 0 else 0.0
+
+    def compute_jfi_from_ms(self, elapsed_ms_list):
+        """Match original runner: convert elapsed ms -> throughput (1000/ms) then Jain's fairness index."""
+        if not elapsed_ms_list:
+            return 0.0
+        throughputs = []
+        for ms in elapsed_ms_list:
+            if ms <= 0:
+                continue
+            throughputs.append(1000.0 / ms)
+        n = len(throughputs)
+        if n == 0:
+            return 0.0
+        s = sum(throughputs)
+        s2 = sum(x * x for x in throughputs)
+        jfi = (s * s) / (n * s2) if s2 > 0 else 0.0
+        return jfi
 
     def cleanup_logs(self):
         """Clean old log files"""
@@ -46,74 +64,144 @@ class Runner:
             os.remove(log)
         print("Cleaned old logs")
 
-    def run_experiment(self, n_clients, c):
+    def run_experiment(self, n_clients, c, client_timeout=120):
+        """
+        Uses your working runner logic:
+        - Starts Mininet net via make_net()
+        - Starts server on h2
+        - Launches greedy client first on h1, then remaining clients
+        - Collects outputs and extracts ELAPSED_MS
+        - Terminates server, kills leftover clients, stops net
+        Returns: list of elapsed_ms (floats) collected from clients that reported them.
+        """
         from topo_wordcount import make_net
 
-        # always creates h1 (clients) and h2 (server)
         net = make_net()
         net.start()
 
         server_host = net.get('h2')
         client_host = net.get('h1')
 
-        # start server
+        # start server on h2 (stdout/stderr left attached to host console)
         server_proc = server_host.popen(SERVER_CMD, shell=True)
-        time.sleep(2)
+        time.sleep(1.5)  # give it a short time to bind
 
         if server_proc.poll() is not None:
             print("[ERROR] server failed to start")
-            net.stop()
+            try:
+                net.stop()
+            except Exception:
+                pass
             return []
 
         # launch all clients on h1
         client_procs = []
-        # Launch the greedy client first
-        client_procs.append(
-            client_host.popen(f"{CLIENT_CMD} --is_greedy --c {c}", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        )
-        # Launch the non-greedy clients
-        for i in range(n_clients - 1):
-            client_procs.append(
-                client_host.popen(f"{CLIENT_CMD}", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            )
+        # Launch the greedy client first (client id 0)
+        greedy_cmd = f"{CLIENT_CMD} --is_greedy --c {c}"
+        client_procs.append((0, client_host.popen(greedy_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)))
+
+        # Launch non-greedy clients (ids 1..n_clients-1)
+        for i in range(1, n_clients):
+            client_procs.append((i, client_host.popen(f"{CLIENT_CMD}", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)))
 
         run_times = []
-        for proc in client_procs:
-            out, _ = proc.communicate()
+        # Collect outputs (with timeout to avoid indefinite hang)
+        for cid, proc in client_procs:
+            try:
+                out, err = proc.communicate(timeout=client_timeout)
+            except subprocess.TimeoutExpired:
+                print(f"[WARN] client {cid} timed out after {client_timeout}s; killing it")
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                try:
+                    out, err = proc.communicate(timeout=2)
+                except Exception:
+                    out = b""
+                    err = b""
             if isinstance(out, bytes):
                 out = out.decode('utf-8', errors='ignore')
-            m = re.search(r"ELAPSED_MS:([\d\.]+)", out)
+
+            m = re.search(r"ELAPSED_MS:([0-9]+(?:\.[0-9]+)?)", out)
             if m:
-                run_times.append(float(m.group(1)))
+                ms = float(m.group(1))
+                run_times.append(ms)
+                print(f"clients={n_clients} client={cid} c={c} elapsed_ms={ms:.3f}")
+                # print entire client output for debugging if needed
+                print(out)
+            else:
+                print(f"[warn] Client {cid} gave no ELAPSED_MS. Raw:\n{out}")
 
         # cleanup server
         try:
             server_proc.terminate()
             server_proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            server_proc.kill()
+            try:
+                server_proc.kill()
+            except Exception:
+                pass
 
-        # cleanup clients
-        for proc in client_procs:
-            if proc.poll() is None:
-                proc.kill()
+        # ensure remaining clients are killed
+        for _, proc in client_procs:
+            try:
+                if proc.poll() is None:
+                    proc.kill()
+            except Exception:
+                pass
 
-        net.stop()
+        # stop mininet
+        try:
+            net.stop()
+        except Exception:
+            pass
+
         return run_times
 
-    def run_all(self, client_count, c_values):
+    def run_all(self, client_count, c_values, runs_per_setting=1):
+        """
+        For each c in c_values, run run_experiment runs_per_setting times,
+        compute JFI for each run and append to RESULTS_CSV.
+        """
         with RESULTS_CSV.open("w", newline="") as f:
-            csv.writer(f).writerow(["num_clients", "c_value", "jfi"])
-        for c in c_values:
-            run_times = self.run_experiment(client_count, c)
-            if run_times:
-                jfi = self.calculate_jfi(run_times)
-                with RESULTS_CSV.open("a", newline="") as f:
-                    csv.writer(f).writerow([client_count, c, jfi])
-                print(f"[INFO] c={c}, jfi={jfi:.3f}")
-            else:
-                print(f"[WARN] No client times recorded for c={c}")
+            csv.writer(f).writerow(["num_clients", "run", "c_value", "jfi"])
 
+        for c in c_values:
+            for run_id in range(1, runs_per_setting + 1):
+                run_times = self.run_experiment(client_count, c)
+                jfi = self.compute_jfi_from_ms(run_times) if run_times else 0.0
+                with RESULTS_CSV.open("a", newline="") as f:
+                    csv.writer(f).writerow([client_count, run_id, c, jfi])
+                print(f"[INFO] client_count={client_count} c={c} run={run_id} jfi={jfi:.3f}")
+
+    def generate_plots(self, results_csv=RESULTS_CSV, output_plot=OUTPUT_PLOT):
+        """
+        Simple plot: read results CSV (num_clients, run, c_value, jfi) and plot jfi vs c_value.
+        If multiple runs present, plot the average jfi per c_value.
+        """
+        if not results_csv.exists():
+            print("[ERROR] results CSV not found:", results_csv)
+            return
+
+        df = pd.read_csv(results_csv, header=0)
+        # When CSV rows are [num_clients, run, c_value, jfi] as we write
+        if df.shape[1] < 4:
+            print("[ERROR] unexpected results CSV format")
+            return
+
+        # Rename columns if needed
+        df.columns = ['num_clients', 'run', 'c_value', 'jfi']
+        grouped = df.groupby('c_value')['jfi'].mean().reset_index()
+
+        plt.figure(figsize=(8, 5))
+        plt.plot(grouped['c_value'], grouped['jfi'], marker='o')
+        plt.xlabel('c (greedy requests)')
+        plt.ylabel('Jain Fairness Index (average over runs)')
+        plt.title('JFI vs c')
+        plt.grid(True)
+        plt.savefig(output_plot)
+        print(f"[INFO] saved plot to {output_plot}")
 
 
 def main():
@@ -129,111 +217,50 @@ def main():
         action="store_true",
         help="Generate plots from existing results.csv."
     )
+    parser.add_argument(
+        "--clients",
+        type=int,
+        default=10,
+        help="Number of clients to run in experiments"
+    )
+    parser.add_argument(
+        "--cmin",
+        type=int,
+        default=1,
+        help="min c value for sweep (inclusive)"
+    )
+    parser.add_argument(
+        "--cmax",
+        type=int,
+        default=90,
+        help="max c value for sweep (inclusive)"
+    )
+    parser.add_argument(
+        "--cstep",
+        type=int,
+        default=10,
+        help="step for c sweep"
+    )
+    parser.add_argument(
+        "--runs",
+        type=int,
+        default=1,
+        help="repetitions per c value"
+    )
     args = parser.parse_args()
 
-    # Conditional execution based on flags
     if args.experiments:
         runner = Runner()
-        c_values = list(range(10,101,10))
-        runner.run_all(client_count=5, c_values=c_values)
+        c_values = list(range(args.cmin, args.cmax + 1, args.cstep))
+        runner.run_all(client_count=args.clients, c_values=c_values, runs_per_setting=args.runs)
 
     if args.plot:
         runner = Runner()
         runner.generate_plots()
 
-    # If no arguments are provided, show help message
     if not args.experiments and not args.plot:
         parser.print_help()
 
 
 if __name__ == "__main__":
     main()
-
-
-
-# #!/usr/bin/env python3
-# import re
-# import time
-# import csv
-# from pathlib import Path
-# from topo_wordcount import make_net
-# import subprocess
-# import numpy as np
-
-# # Config
-# C_VALUES = range(1, 51, 5)      # c = 1..10
-# RUNS_PER_C = 1
-# NUM_CLIENTS = 10
-# SERVER_CMD = "python3 server.py --config config.json"
-# CLIENT_CMD_TMPL = "python3 client.py --config config.json --quiet"
-
-# RESULTS_CSV = Path("results_part3.csv")
-
-# def jains_fairness_index(times):
-#     arr = np.array(times, dtype=float)
-#     num = (arr.sum()) ** 2
-#     den = len(arr) * (arr**2).sum()
-#     return num / den if den > 0 else 0.0
-
-# def main():
-#     # Prepare CSV
-#     with RESULTS_CSV.open("w", newline="") as f:
-#         w = csv.writer(f)
-#         w.writerow(["c", "run", "client_id", "elapsed_ms", "jfi"])
-
-#     net = make_net()
-#     net.start()
-
-#     h1 = net.get('h1')  # client host
-#     h2 = net.get('h2')  # server host
-
-#     if not Path("words.txt").exists():
-#         Path("words.txt").write_text("cat,bat,cat,dog,dog,emu,emu,emu,ant\n")
-
-#     try:
-#         for c in C_VALUES:
-#             for r in range(1, RUNS_PER_C + 1):
-#                 # restart server fresh each run
-#                 srv = h2.popen(SERVER_CMD, shell=True, stdout=None, stderr=None)
-#                 time.sleep(2)
-
-#                 procs = []
-#                 # launch 1 greedy client
-#                 greedy_cmd = CLIENT_CMD_TMPL + f" --is_greedy --c {c}"
-#                 p = h1.popen(greedy_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-#                 procs.append((0, p, True))
-#                 # launch 9 normal clients
-#                 for cid in range(NUM_CLIENTS - 1):
-#                     cmd = CLIENT_CMD_TMPL
-#                     p = h1.popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-#                     procs.append((cid+1, p, False))
-
-#                 times = []
-#                 # collect results
-#                 for cid, p, is_greedy in procs:
-#                     out, err = p.communicate()
-#                     out = out.decode()
-#                     m = re.search(r"ELAPSED_MS:([0-9]+(?:\.[0-9]+)?)", out)
-#                     if not m:
-#                         print(f"[warn] Client {cid} gave no ELAPSED_MS. Raw:\n{out}")
-#                         continue
-#                     ms = float(m.group(1))
-#                     times.append(ms)
-
-#                 # compute fairness
-#                 jfi = jains_fairness_index(times) if times else 0.0
-
-#                 # write all client times + jfi
-#                 for cid, ms in enumerate(times):
-#                     with RESULTS_CSV.open("a", newline="") as f:
-#                         csv.writer(f).writerow([c, r, cid, ms, jfi])
-#                 print(f"c={c} run={r} JFI={jfi:.3f}")
-
-#                 srv.terminate()
-#                 time.sleep(0.2)
-
-#     finally:
-#         net.stop()
-
-# if __name__ == "__main__":
-#     main()

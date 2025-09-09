@@ -8,8 +8,8 @@ from mininet.cli import CLI
 
 # Config
 NUM_CLIENTS_VALUES = [10]
-RUNS_PER_SETTING = 5
-C = 5
+RUNS_PER_SETTING = 2
+C = 50
 SERVER_CMD = "python3 server.py --config config.json"
 CLIENT_CMD_TMPL = "python3 client.py --config config.json"
 
@@ -68,7 +68,7 @@ def main():
                 cmd = CLIENT_CMD_TMPL + f" --is_greedy --c {C}"
                 p = h1.popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 procs.append((0, p))
-                for cid in range(1, num_clients - 1):
+                for cid in range(1, num_clients):
                     cmd = CLIENT_CMD_TMPL
                     p = h1.popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     procs.append((cid, p))
@@ -79,7 +79,6 @@ def main():
                     out, err = p.communicate()
                     out = out.decode()
                     m = re.search(r"ELAPSED_MS:([0-9]+(?:\.[0-9]+)?)", out)
-                    print(out)
                     if not m:
                         print(f"[warn] Client {cid} gave no ELAPSED_MS. Raw:\n{out}")
                         continue
@@ -87,6 +86,8 @@ def main():
                     elapsed_list.append(ms)
                     # still print per-client info for debugging
                     print(f"clients={num_clients} run={r} client={cid} c={C} elapsed_ms={ms:.3f}")
+                    print(out)
+
 
                 # compute JFI from elapsed times (converted to throughput)
                 jfi = compute_jfi(elapsed_list)

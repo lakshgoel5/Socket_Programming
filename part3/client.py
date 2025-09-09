@@ -129,6 +129,7 @@
 
 
 #!/usr/bin/env python3
+import csv
 import socket
 import json
 import time
@@ -181,6 +182,9 @@ def main():
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((server_ip, server_port))
+    # with open("client_results.csv", "w", newline="") as f:
+    #     writer = csv.writer(f)
+    #     writer.writerow(["word", "count"])
 
     requests_to_send = c if is_greedy else 1
     all_data = ""
@@ -201,6 +205,7 @@ def main():
 
             chunk = data.decode()
             all_data += chunk
+
             responses_received += chunk.count("\n")  # each response ends with newline
 
             if "EOF" in chunk:
@@ -211,7 +216,9 @@ def main():
         
     elapsed_ms = (time.perf_counter() - start) * 1000
     print(f"ELAPSED_MS:{elapsed_ms:.3f}")
-    
+
+    #print in csv file
+
     sock.close()
 
     analyse_result = analyse(all_data)
