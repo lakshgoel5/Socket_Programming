@@ -5,6 +5,7 @@ import csv
 from pathlib import Path
 from topo_wordcount import make_net
 from mininet.cli import CLI
+import subprocess
 
 # Config
 NUM_CLIENTS_VALUES = [10]
@@ -13,7 +14,7 @@ C = 50
 SERVER_CMD = "python3 server.py --config config.json"
 CLIENT_CMD_TMPL = "python3 client.py --config config.json"
 
-RESULTS_CSV = Path("results_part3.csv")
+RESULTS_CSV = Path("results_runner.csv")
 
 def modify_config(param, value):
     import json
@@ -24,14 +25,14 @@ def modify_config(param, value):
         json.dump(cfg, f, indent=2)
 
 def compute_jfi(elapsed_ms_list):
-    #throughputs jfi
     if not elapsed_ms_list:
         return 0.0
+    # convert to throughputs (requests per second) -- avoid division by zero
     throughputs = []
     for ms in elapsed_ms_list:
         if ms <= 0:
             continue
-        throughputs.append(1000.0 / ms)
+        throughputs.append(1000.0 / ms)  # 1000/ms -> # requests per second
     n = len(throughputs)
     if n == 0:
         return 0.0
@@ -105,5 +106,4 @@ def main():
         net.stop()
 
 if __name__ == "__main__":
-    import subprocess
     main()

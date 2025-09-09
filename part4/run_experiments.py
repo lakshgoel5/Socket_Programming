@@ -1,43 +1,25 @@
 #!/usr/bin/env python3
-
 import json
 import os
 import time
 import glob
-import numpy as np
-import csv
-from statistics import mean
 import re
-from pathlib import Path
-import argparse
+import csv
 import subprocess
-import pandas as pd
-import matplotlib.pyplot as plt
-
-OUTPUT_PLOT = "p3_plot.png"
+from pathlib import Path
+from topo_wordcount import make_net
 
 RESULTS_CSV = Path("results.csv")
-SERVER_CMD = "python3 server.py --config config.json"
-CLIENT_CMD = "python3 client.py --config config.json --quiet"
-
+SERVER_CMD = "python3 -u server.py --config config.json"
+CLIENT_CMD = "python3 client.py --config config.json"
 
 class Runner:
     def __init__(self, config_file='config.json'):
         with open(config_file, 'r') as f:
             self.config = json.load(f)
-
-        self.server_ip = self.config['server_ip']
-        self.port = self.config['server_port']
-        self.p = self.config['p'] 
-        self.k = self.config['k'] 
-
-    def calculate_jfi(self, values):
-        if not values:
-            return 0.0
-        n = len(values)
-        s = sum(values)
-        sq_sum = sum(v * v for v in values)
-        return (s * s) / (n * sq_sum) if sq_sum > 0 else 0.0
+        # Not strictly needed unless used
+        self.server_ip = self.config.get('server_ip', '127.0.0.1')
+        self.port = self.config.get('server_port', 8000)
 
     def compute_jfi_from_ms(self, elapsed_ms_list):
         if not elapsed_ms_list:
@@ -52,27 +34,18 @@ class Runner:
             return 0.0
         s = sum(throughputs)
         s2 = sum(x * x for x in throughputs)
-        jfi = (s * s) / (n * s2) if s2 > 0 else 0.0
-        return jfi
+        return (s * s) / (n * s2) if s2 > 0 else 0.0
 
-    def cleanup_logs(self):
-        logs = glob.glob("logs/*.log")
-        for log in logs:
-            os.remove(log)
-        print("Cleaned old logs")
-
-    def run_experiment(self, n_clients, c, client_timeout=120):
-        from topo_wordcount import make_net
-
+    def run_experiment(self, n_clients, c):
         net = make_net()
         net.start()
 
         server_host = net.get('h2')
         client_host = net.get('h1')
 
-        # server on h2
-        server_proc = server_host.popen(SERVER_CMD, shell=True)
-        time.sleep(1.5)  # time to bind properly
+        # start server on h2
+        server_proc = server_host.popen(SERVER_CMD, shell=True, stdout=None, stderr=None)
+        time.sleep(2)
 
         if server_proc.poll() is not None:
             print("[ERROR] server failed to start")
@@ -82,45 +55,38 @@ class Runner:
                 pass
             return []
 
-        # all clients on h1
+        # launch greedy client first
         client_procs = []
-        # Launch the greedy client first (client id 0)
         greedy_cmd = f"{CLIENT_CMD} --is_greedy --c {c}"
         client_procs.append((0, client_host.popen(greedy_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)))
-        # Launch non-greedy clients (ids 1..n_clients-1)
+        # launch other clients
         for i in range(1, n_clients):
-            client_procs.append((i, client_host.popen(f"{CLIENT_CMD}", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)))
+            client_procs.append((i, client_host.popen(CLIENT_CMD, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)))
 
         run_times = []
         for cid, proc in client_procs:
             try:
-                out, err = proc.communicate(timeout=client_timeout)
+                out, err = proc.communicate()
             except subprocess.TimeoutExpired:
-                print(f"[WARN] client {cid} timed out after {client_timeout}s; killing it")
+                print(f"[warn] client {cid} timed out, killing")
                 try:
                     proc.kill()
                 except Exception:
                     pass
-                try:
-                    out, err = proc.communicate(timeout=2)
-                except Exception:
-                    out = b""
-                    err = b""
-            if isinstance(out, bytes):
-                out = out.decode('utf-8', errors='ignore')
-
-            m = re.search(r"ELAPSED_MS:([0-9]+(?:\.[0-9]+)?)", out)
+                continue
+            out = out.decode('utf-8', errors='ignore')
+            m = re.search(r"ELAPSED_MS:([0-9]+(?:\.[0-9]+)?)", out) 
             if m:
                 ms = float(m.group(1))
                 run_times.append(ms)
                 print(f"clients={n_clients} client={cid} c={c} elapsed_ms={ms:.3f}")
             else:
-                print(f"[warn] Client {cid} gave no ELAPSED_MS. Raw:\n{out}")
+                print(f"[warn] Client {cid} gave no ELAPSED_MS. Raw:\n{out[:300]}")
 
         try:
             server_proc.terminate()
             server_proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
+        except Exception:
             try:
                 server_proc.kill()
             except Exception:
@@ -141,10 +107,8 @@ class Runner:
         return run_times
 
     def run_all(self, client_count, c_values, runs_per_setting=1):
-        
         with RESULTS_CSV.open("w", newline="") as f:
             csv.writer(f).writerow(["num_clients", "run", "c_value", "jfi"])
-
         for c in c_values:
             for run_id in range(1, runs_per_setting + 1):
                 run_times = self.run_experiment(client_count, c)
@@ -153,12 +117,10 @@ class Runner:
                     csv.writer(f).writerow([client_count, run_id, c, jfi])
                 print(f"[INFO] client_count={client_count} c={c} run={run_id} jfi={jfi:.3f}")
 
-
 def main():
     runner = Runner()
-    c_values = list(range(1, 90 + 1, 10))
+    c_values = list(range(11, 91, 10)) #run for c values at intervals of 10
     runner.run_all(client_count=10, c_values=c_values, runs_per_setting=1)
-
 
 if __name__ == "__main__":
     main()

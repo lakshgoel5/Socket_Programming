@@ -58,8 +58,8 @@ def main():
     server_sock.setblocking(False)
 
     sockets = [server_sock]
-    buffers = {}  # per-connection receive buffer: conn -> str
-    addrs = {}    # optional mapping conn -> addr for logging
+    buffers = {} # Data(request) of all client sockets
+    addrs = {} #
 
     # print(f"[srv] Concurrent server listening on {server_ip}:{server_port}")
 
@@ -78,7 +78,6 @@ def main():
                     sockets.append(conn)
                     buffers[conn] = ""
                     addrs[conn] = addr
-                    # print(f"[srv] accepted connection from {addr}")
                 except Exception as e:
                     print("[srv] accept error:", e)
                 continue
@@ -102,8 +101,6 @@ def main():
 
                 chunk = data.decode('utf-8', errors='replace')
                 addr = addrs.get(sock, "<unknown>")
-                # debug print
-                # print(f"[srv] recv from {addr}: {repr(chunk)}")
 
                 buf = buffers.get(sock, "") + chunk
                 # while we have at least one full request line, process it
@@ -114,27 +111,15 @@ def main():
                         # ignore empty lines
                         continue
                     response = process_request(line, word_list)
-                    # debug print
-                    # print(f"[srv] {addr} req={repr(line)} -> resp={repr(response.strip())}")
-
-                    try:
-                        sock.sendall(response.encode('utf-8'))
-                    except Exception as e:
-                        print(f"[srv] send error to {addr}: {e}")
-                        # drop connection
-                        break
+                    sock.sendall(response.encode('utf-8'))
 
                     # If response contains EOF, close the connection so client can finish
                     if "EOF" in response:
-                        print(f"[srv] closing {addr} after EOF")
                         if sock in sockets:
                             sockets.remove(sock)
                         buffers.pop(sock, None)
                         addrs.pop(sock, None)
-                        try:
-                            sock.close()
-                        except Exception:
-                            pass
+                        sock.close()
                         # after closing, stop processing this socket
                         buf = ""  # discard any leftover
                         break
