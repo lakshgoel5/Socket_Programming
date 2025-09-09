@@ -8,7 +8,7 @@ from mininet.cli import CLI
 
 # Config
 NUM_CLIENTS_VALUES = [1, 5, 9, 13, 17, 21, 25, 29, 32]
-RUNS_PER_SETTING = 5
+RUNS_PER_SETTING = 2
 SERVER_CMD = "python3 server.py --config config.json"
 CLIENT_CMD_TMPL = "python3 client.py --config config.json --quiet"
 

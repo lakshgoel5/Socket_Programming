@@ -4,7 +4,7 @@ run:
 	sudo python3 runner.py
 
 experiments:
-	sudo python3 experiments.py
+	sudo python3 run_experiments.py
 
 plot:
 	python3 plot_part2.py
