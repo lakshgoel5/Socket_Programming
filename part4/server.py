@@ -54,25 +54,23 @@ def main():
 
     print(f"[srv] RR server listening on {server_ip}:{server_port}")
 
-    clients = []          # sockets in accept order => RR order
-    addrs = {}            # sock -> addr
-    recv_buf = {}         # sock -> partial receive buffer (string)
-    pending = {}          # sock -> deque of parsed request lines
-    rr_idx = 0            # index into clients for next RR turn
-    sockets = [srv] #List of all Sockets
-
+    clients = [] 
+    addrs = {} 
+    recv_buf = {} 
+    pending = {}  
+    rr_idx = 0 
+    
 
     try:
         while True:
+            sockets = [srv] + clients
             try:
                 read_list, _, _ = select.select(sockets, [], [], 0.5)
             except Exception:
                 continue
 
-            # First: handle reads -> accumulate parsed lines into pending queues
             for s in read_list:
-                if s is srv:
-                    # accept new connection
+                if s is srv: #server requests add more clients
                     try:
                         conn, addr = srv.accept()
                         conn.setblocking(False)
@@ -85,7 +83,7 @@ def main():
                         print("[srv] accept error:", e)
                     continue
 
-                # client socket has data
+                # client sockets are data reqeusts
                 try:
                     data = s.recv(4096)
                 except Exception:
@@ -104,7 +102,7 @@ def main():
                 if not data:
                     # client closed
                     addr = addrs.get(s, "<unknown>")
-                    # print(f"[srv] client {addr} closed")
+                    print(f"[srv] client {addr} closed")
                     if s in clients: clients.remove(s)
                     recv_buf.pop(s, None)
                     pending.pop(s, None)
@@ -114,7 +112,7 @@ def main():
                     if rr_idx >= len(clients): rr_idx = 0
                     continue
 
-                # decode and split complete lines, enqueue them
+                # decode and split lines, enqueue
                 chunk = data.decode('utf-8', errors='replace')
                 buf = recv_buf.get(s, "") + chunk
                 while '\n' in buf:
@@ -123,19 +121,18 @@ def main():
                     if line == "":
                         continue
                     pending.setdefault(s, deque()).append(line)
-                    # debug: print enqueued request
-                    # print(f"[srv] enqueued {addrs.get(s)}: {repr(line)}")
+                    print(f"[srv] enqueued {addrs.get(s)}: {repr(line)}")
                 recv_buf[s] = buf
 
-            # Second: scheduling step (one request per client per round-robin turn)
-            # If no clients or no pending anywhere, skip
+            # scheduling
+            # If no clients or pending anywhere, skip
             if not clients:
                 continue
             if not any(pending.get(c) and len(pending[c])>0 for c in clients):
                 continue
 
             # Start scanning from rr_idx and find the next client that has pending requests.
-            # Serve only one request from that client, then advance rr_idx to the next client.
+            # Serve only one request from that client, advance rr_idx to next client.
             start = rr_idx % len(clients)
             tried = 0
             idx = start
@@ -166,7 +163,7 @@ def main():
                         break
 
                     # optionally print served mapping for debugging
-                    print(f"[srv] served {addr} req={req} -> {resp.strip()}")
+                    # print(f"[srv] served {addr} req={req} -> {resp.strip()}")
 
                     # If response contained EOF, close client so client sees EOF and exits
                     if "EOF" in resp:
