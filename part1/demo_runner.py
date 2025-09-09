@@ -18,6 +18,6 @@ srv = h2.popen("./server --config demo_config.json", shell=True)
 time.sleep(0.5)
 
 # run client once (no --quiet): prints word frequencies + ELAPSED_MS
-print(h1.cmd(f"./client --config demo_config.json --k {K} --quiet"))
+print(h1.cmd(f"./client --config demo_config.json --k {K}"))
 
 srv.terminate(); time.sleep(0.2); net.stop()

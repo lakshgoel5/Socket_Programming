@@ -4,10 +4,10 @@ run:
 	sudo python3 runner.py
 
 experiments:
-	sudo python3 run_experiments.py --experiments
+	sudo python3 experiments.py
 
 plot:
-	python3 run_experiments.py --plot
+	python3 plot_part2.py
 
 clean:
 	rm -f results.csv p2_plot.png

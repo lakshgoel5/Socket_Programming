@@ -1,137 +1,77 @@
-# #!/usr/bin/env python3
-# import time
-# import json
-# import subprocess
-# from pathlib import Path
-# import sys
-# from topo_wordcount import create_network
-
-# SERVER_CMD = "python3 server.py --config config.json"
-# CLIENT_CMD = "python3 client.py --config config.json"
-
-# base_config = json.loads(Path("config.json").read_text())
-# num_clients = base_config["num_clients"]
-
-# print(f"--- Starting demo with {num_clients} concurrent clients ---")
-
-# #Mininet
-# net = create_network(num_clients=num_clients)
-# net.start()
-
-# server_host = net.get('server')
-# client_hosts = []
-# for i in range(1, num_clients + 1):
-#     name = f'client{i}'
-#     host = net.get(name)
-#     client_hosts.append(host)
-
-# # Start server
-# server_proc = server_host.popen(SERVER_CMD, shell=True)
-# time.sleep(2) # Wait for server to bind
-
-# if server_proc.poll() is None:  # still running → started successfully
-#     print(f"[DEBUG] server_proc process started successfully (PID: {server_proc.pid})")
-# else:
-#     print(f"[ERROR] server_proc failed to start. Return code: {server_proc.returncode}")
-#     net.stop()
-#     sys.exit(1)
-
-# start_time = time.time()
-
-# # Start clients concurrently
-# print("Starting client processes on h_client1 through h_client...")
-# client_procs = []
-# for i, client in enumerate(client_hosts, 1): #i starts at 1
-#     proc = client.popen("python3 client.py", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-#     client_procs.append(proc)
-
-# # Wait for all clients to finish and print their output
-# for i, proc in enumerate(client_procs, 1):
-#     stdout, stderr = proc.communicate() #communicate waits for each process in sequence
-#     print(f"\n--- Output from Client {i} ---")
-#     print(stdout)
-#     if stderr:
-#         print(f"Errors:\n{stderr}")
-#     print(f"Client {i} completed with return code {proc.returncode}")
-
-# end_time = time.time()
-# total_time = end_time - start_time
-
-# print(f"All {num_clients} clients completed in {total_time:.2f} seconds")
-
-# # Clean up
-# print("\nDemo finished. Shutting down...")
-# server_proc.terminate()
-# time.sleep(0.5)
-# net.stop()
-# print("\nExperiment Successful")
-
-
 #!/usr/bin/env python3
+import re
 import time
-import json
-import subprocess
+import csv
 from pathlib import Path
-import sys
 from topo_wordcount import make_net
+from mininet.cli import CLI
 
+# Config
+NUM_CLIENTS_VALUES = [2]
+RUNS_PER_SETTING = 1
 SERVER_CMD = "python3 server.py --config config.json"
-CLIENT_CMD = "python3 client.py --config config.json"
+CLIENT_CMD_TMPL = "python3 client.py --config config.json"
 
-base_config = json.loads(Path("config.json").read_text())
-num_clients = base_config["num_clients"]
+RESULTS_CSV = Path("results_part2.csv")
 
-print(f"--- Starting demo with {num_clients} concurrent clients ---")
+def modify_config(param, value):
+    import json
+    with open("config.json", "r") as f:
+        cfg = json.load(f)
+    cfg[param] = value
+    with open("config.json", "w") as f:
+        json.dump(cfg, f, indent=2)
 
-#Mininet
-net = make_net()
-net.start()
+def main():
+    # Prepare CSV
+    with RESULTS_CSV.open("w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["num_clients", "run", "client_id", "elapsed_ms"])
 
-server_host = net.get('h1')
-client_host = net.get('h2')
+    net = make_net()
+    net.start()
 
-# Start server
-server_proc = server_host.popen(SERVER_CMD, shell=True)
-time.sleep(2) # Wait for server to bind
+    h1 = net.get('h1')  # client host
+    h2 = net.get('h2')  # server host
 
-if server_proc.poll() is None:  # still running → started successfully
-    print(f"[DEBUG] server_proc process started successfully (PID: {server_proc.pid})")
-else:
-    print(f"[ERROR] server_proc failed to start. Return code: {server_proc.returncode}")
-    net.stop()
-    sys.exit(1)
+    # Ensure words.txt exists (shared FS)
+    if not Path("words.txt").exists():
+        Path("words.txt").write_text("cat,bat,cat,dog,dog,emu,emu,emu,ant\n")
 
-start_time = time.time()
+    try:
+        for num_clients in NUM_CLIENTS_VALUES:
+            for r in range(1, RUNS_PER_SETTING + 1):
+                # restart server fresh each run
+                srv = h2.popen(SERVER_CMD, shell=True, stdout=None, stderr=None)
+                time.sleep(2)  # give it time to bind
 
-# Start clients concurrently
-print("Starting client processes on h_client1 through h_client...")
-client_procs = [
-    client_host.popen(
-        CLIENT_CMD,
-        shell=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
-    )
-    for _ in range(num_clients)
-]
+                # launch clients in parallel
+                procs = []
+                for cid in range(num_clients):
+                    cmd = CLIENT_CMD_TMPL
+                    p = h1.popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    procs.append((cid, p))
 
-# Wait for all clients to finish and print their output
-for i, proc in enumerate(client_procs, 1):
-    stdout, stderr = proc.communicate() #communicate waits for each process in sequence
-    print(f"\n--- Output from Client {i} ---")
-    print(stdout.decode())
-    if stderr:
-        print(f"Errors:\n{stderr}")
-    print(f"Client {i} completed with return code {proc.returncode}")
+                # collect results
+                for cid, p in procs:
+                    out, err = p.communicate()
+                    out = out.decode()
+                    m = re.search(r"ELAPSED_MS:([0-9]+(?:\.[0-9]+)?)", out)
+                    print(out)
+                    if not m:
+                        print(f"[warn] Client {cid} gave no ELAPSED_MS. Raw:\n{out}")
+                        continue
+                    ms = float(m.group(1))  # <-- float instead of int
+                    with RESULTS_CSV.open("a", newline="") as f:
+                        csv.writer(f).writerow([num_clients, r, cid, ms])
+                    print(f"clients={num_clients} run={r} client={cid} elapsed_ms={ms:.3f}")
 
-end_time = time.time()
-total_time = end_time - start_time
+                srv.terminate()
+                time.sleep(0.2)
 
-print(f"All {num_clients} clients completed in {total_time:.2f} seconds")
+    finally:
+        net.stop()
 
-# Clean up
-print("\nDemo finished. Shutting down...")
-server_proc.terminate()
-time.sleep(0.5)
-net.stop()
-print("\nExperiment Successful")
+if __name__ == "__main__":
+    import subprocess
+    main()

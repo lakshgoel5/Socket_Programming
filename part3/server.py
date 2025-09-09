@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 import socket
-import sys
 import json
+import select
 
-def parse_config(filename):
+def load_config(filename="config.json"):
     with open(filename, "r") as f:
         return json.load(f)
 
-def load_words(filename):
-    """Load comma-separated words into a list, append EOF marker"""
+def load_words(filename="words.txt"):
     words = []
     with open(filename, "r") as f:
         for line in f:
@@ -19,79 +18,69 @@ def load_words(filename):
     words.append("EOF")
     return words
 
-def handle_client(client_socket, word_list):
+def process_request(data, word_list):
+    if not data:
+        return "EOF\n"
+
+    if data.endswith("\n"):
+        data = data[:-1]
+
     try:
-        data = client_socket.recv(1024).decode()
-        if not data.endswith('\n'):
-            client_socket.sendall(b"EOF\n")
-            return
+        p_str, k_str = data.split(",")
+        p, k = int(p_str), int(k_str)
+    except Exception:
+        return "EOF\n"
 
-        data = data.strip()
-        parts = data.split(',')
-        if len(parts) != 2:
-            client_socket.sendall(b"EOF\n")
-            return
+    n = len(word_list)
+    response_words = []
+    pos = p
+    for pos in range(p, min(p + k, n)):
+        response_words.append(word_list[pos])
 
-        try:
-            p = int(parts[0])
-            k = int(parts[1])
-        except ValueError:
-            client_socket.sendall(b"EOF\n")
-            return
+    if pos < p + k - 1:  # not enough words
+        response_words.append("EOF")
 
-        if p >= len(word_list):
-            client_socket.sendall(b"EOF\n")
-            return
-
-        slice_end = p + k
-        if slice_end > len(word_list):
-            slice_end = len(word_list)
-
-        response_words = word_list[p:slice_end]
-        if response_words and response_words[-1] == "EOF":
-            # Send words until EOF including it, suffixed by \n
-            response = ','.join(response_words) + '\n'
-        elif slice_end == len(word_list):
-            # End reached without EOF in slice
-            response = ','.join(response_words) + ',EOF\n'
-        else:
-            response = ','.join(response_words) + '\n'
-
-        client_socket.sendall(response.encode())
-    finally:
-        client_socket.close()
+    return ",".join(response_words) + "\n"
 
 def main():
-    config = parse_config("config.json")
-    if not config:
-        return 1
+    cfg = load_config()
+    word_list = load_words(cfg.get("filename", "words.txt"))
 
-    word_list = load_words(config.get("filename", "words.txt"))
-    if not word_list:
-        return 1
+    server_ip = cfg["server_ip"]
+    server_port = int(cfg["server_port"])
 
-    server_ip = config.get("server_ip", "0.0.0.0")
-    server_port = int(config.get("server_port", 5000))
-    num_clients = int(config.get("num_clients", 1))
+    # create TCP socket
+    server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server_sock.bind((server_ip, server_port))
+    server_sock.listen(32)  # backlog
+    server_sock.setblocking(False)
 
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sockets = [server_sock]  # list of sockets we monitor
 
-    server_socket.bind((server_ip, server_port))
-    server_socket.listen(100)
-    print(f"Server listening on {server_ip}:{server_port}")
+    print(f"Concurrent server listening on {server_ip}:{server_port}")
 
-    try:
-        while True:
-            client_socket, addr = server_socket.accept()
-            print(f"Connection accepted from {addr}")
-            handle_client(client_socket, word_list)
-    except KeyboardInterrupt:
-        print("Server shutting down.")
-    finally:
-        server_socket.close()
-    return 0
+    while True:
+        read_list, _, _ = select.select(sockets, [], [])
+        for sock in read_list:
+            if sock is server_sock:
+                # new connection
+                conn, addr = server_sock.accept()
+                conn.setblocking(False)
+                sockets.append(conn)
+            else:
+                try:
+                    data = sock.recv(1024).decode()
+                    if data:
+                        response = process_request(data, word_list)
+                        sock.sendall(response.encode())
+                    else:
+                        # only close if client closed connection
+                        sockets.remove(sock)
+                        sock.close()
+                except Exception:
+                    sockets.remove(sock)
+                    sock.close()
 
 if __name__ == "__main__":
-    import sys
-    sys.exit(main())
+    main()
