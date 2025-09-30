@@ -1,9 +1,9 @@
 <br />
 <div align="center">
 
-  <h1 align="center">Stones and Rivers Game</h1>
+  <h1 align="center">Socket Programming</h1>
   <p align="center">
-    The game is based on using stones to score in the opponent’s Score Area while strategically positioning Rivers to enable sweeping movements across the board. Stones serve as the scoring side of each piece, while Rivers act as the mobility side, guiding Stones along their flow direction.
+    In networks, sockets are the abstractions available to the application developer. Using socket programming, we will implement a basic client-server program along with a few scheduling algorithms
   </p>
 
 </div>
