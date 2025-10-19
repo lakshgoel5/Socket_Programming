@@ -514,25 +514,13 @@ The plot `p4_plot.png` shows JFI remaining high (near 1.0) as c increases under 
 
 ---
 
-## Assignment Details
+## Notes
 
 This project was completed as Assignment 2 for the course **COL334/672: Computer Networks** (Diwali'25 semester).
-
-**Assignment Objectives**:
-1. Learn TCP socket programming in C++ and Python
-2. Understand client-server architecture
-3. Implement concurrent connection handling
-4. Analyze scheduling algorithms (FCFS vs Round-Robin)
-5. Evaluate fairness using Jain's Fairness Index
-6. Use Mininet for network emulation and testing
 
 **Full Problem Statement**: See `Assignment2_Complete.pdf` for detailed specifications.
 
 **Project Report**: See `report.pdf` for comprehensive analysis and results.
-
----
-
-## Notes
 
 1. **Mininet Requirements**: All experiments require sudo/root access to run Mininet
 2. **Network Cleanup**: Always run `sudo mn -c` before experiments to clean previous state
@@ -540,14 +528,3 @@ This project was completed as Assignment 2 for the course **COL334/672: Computer
 4. **Configuration**: Each part has a `config.json` file with tunable parameters
 5. **Word Files**: Sample word files (`words.txt`, `words1.txt`, `words2.txt`) are provided
 
----
-
-## Acknowledgments
-
-- Course instructors and TAs for the assignment design
-- Mininet project for the network emulation platform
-- Python and C++ communities for excellent documentation
-
----
-
-**End of README**
