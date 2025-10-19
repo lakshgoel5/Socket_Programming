@@ -28,7 +28,6 @@
   - [Part 2: Concurrent Client Handling](#part-2-concurrent-client-handling)
   - [Part 3: FCFS Scheduling with Greedy Client](#part-3-fcfs-scheduling-with-greedy-client)
   - [Part 4: Round-Robin Scheduling](#part-4-round-robin-scheduling)
-- [Assignment Details](#assignment-details)
 
 ---
 
